@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>まるばつゲーム</title>
+  <style>
+    :root{
+      --bg:#0f1724; --panel:#0b1220; --accent:#06b6d4; --win:#16a34a; --lose:#ef4444; color-scheme: dark;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#071021 0%,var(--bg) 100%);font-family:Inter,system-ui,ui-sans-serif,Segoe UI,Roboto,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;color:#e6eef6}
+    .container{width:100%;max-width:720px;padding:24px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:14px;padding:18px;box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+    h1{margin:0 0 8px 0;font-size:20px}
+    .top{display:flex;gap:12px;align-items:center;justify-content:space-between}
+    .info{display:flex;gap:12px;align-items:center}
+    .status{background:#071426;padding:8px 12px;border-radius:8px;font-weight:600}
+    .controls{display:flex;gap:8px}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;color:inherit;cursor:pointer}
+    button.primary{background:linear-gradient(90deg,var(--accent),#7dd3fc33);border:0}
+    .board-wrap{display:flex;gap:20px;flex-wrap:wrap;margin-top:18px}
+    .board{width:320px;height:320px;background:linear-gradient(180deg,#061426,#081426);border-radius:12px;padding:12px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:12px}
+    .cell{background:linear-gradient(180deg,#071a2a,#051826);display:flex;align-items:center;justify-content:center;font-size:64px;border-radius:8px;user-select:none;cursor:pointer;color:#e6eef6;font-weight:800}
+    .cell.disabled{cursor:not-allowed;opacity:0.7}
+    .cell.win{background:linear-gradient(90deg,#06331d,#0b6b3b);box-shadow:0 6px 18px rgba(22,163,74,0.16)}
+    .score{min-width:260px;padding:12px;border-radius:8px;background:linear-gradient(180deg,#071a2a,#061426);display:flex;flex-direction:column;gap:10px}
+    .score .row{display:flex;justify-content:space-between}
+    .small{font-size:13px;opacity:0.8}
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;opacity:0.9}
+    @media(max-width:720px){.board{width:260px;height:260px}.container{padding:12px}.card{padding:12px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="top">
+        <div>
+          <h1>まるばつゲーム</h1>
+          <div class="small">5手前のマークが消えるモードです。</div>
+        </div>
+        <div class="info">
+          <div class="status" id="status">プレイヤー：○ の番</div>
+          <div class="controls">
+            <button id="undoBtn">戻す（Undo）</button>
+            <button id="restartBtn" class="primary">リスタート</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board" id="board"></div>
+        <div class="score">
+          <div class="row"><strong>スコア</strong><span id="round">ラウンド: 1</span></div>
+          <div class="row"><span>○（プレイヤー1）</span><strong id="scoreO">0</strong></div>
+          <div class="row"><span>×（プレイヤー2）</span><strong id="scoreX">0</strong></div>
+          <div class="row"><span>引き分け</span><strong id="scoreD">0</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    const restartBtn = document.getElementById('restartBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const scoreO = document.getElementById('scoreO');
+    const scoreX = document.getElementById('scoreX');
+    const scoreD = document.getElementById('scoreD');
+    const roundEl = document.getElementById('round');
+
+    let board = Array(9).fill(null);
+    let current = 'O';
+    let over = false;
+    let history = [];
+    let scores = {O:0,X:0,D:0};
+    let round = 1;
+
+    const WIN_LINES = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+
+    function renderBoard(){
+      boardEl.innerHTML = '';
+      board.forEach((val,i)=>{
+        const cell=document.createElement('div');
+        cell.className='cell'+(val?' disabled':'');
+        cell.dataset.idx=i;
+        cell.innerText=val||'';
+        cell.addEventListener('click',onCellClick);
+        boardEl.appendChild(cell);
+      });
+    }
+
+    function onCellClick(e){
+      if(over)return;
+      const idx=Number(e.currentTarget.dataset.idx);
+      if(board[idx])return;
+      makeMove(idx,current);
+    }
+
+    function makeMove(idx,player){
+      board[idx]=player;
+      history.push({idx,player});
+      if(history.length>5){
+        const old=history.shift();
+        board[old.idx]=null; // remove 5th old mark
+      }
+      checkGame();
+      if(!over){
+        current=current==='O'?'X':'O';
+        updateStatus(`${current} の番`);
+      }
+      renderBoard();
+    }
+
+    function checkGame(){
+      for(const line of WIN_LINES){
+        const[a,b,c]=line;
+        if(board[a]&&board[a]===board[b]&&board[a]===board[c]){
+          endGame(board[a],line);
+          return;
+        }
+      }
+      if(board.every(c=>c!==null))endGame(null,null);
+    }
+
+    function endGame(winner,line){
+      over=true;
+      if(winner){
+        updateStatus(`勝者: ${winner}`);
+        scores[winner]++;
+        highlightWin(line);
+      }else{
+        updateStatus('引き分け');
+        scores.D++;
+      }
+      updateScores();
+      round++;
+      roundEl.innerText=`ラウンド: ${round}`;
+    }
+
+    function highlightWin(line){
+      renderBoard();
+      line.forEach(i=>{
+        const cell=boardEl.querySelector(`[data-idx='${i}']`);
+        if(cell)cell.classList.add('win');
+      });
+    }
+
+    function updateStatus(t){statusEl.innerText=t;}
+    function updateScores(){scoreO.innerText=scores.O;scoreX.innerText=scores.X;scoreD.innerText=scores.D;}
+
+    function restart(){
+      board=Array(9).fill(null);
+      over=false;
+      history=[];
+      current=(round%2===0)?'X':'O';
+      updateStatus(`プレイヤー：${current} の番`);
+      renderBoard();
+    }
+
+    restartBtn.addEventListener('click',restart);
+    undoBtn.addEventListener('click',()=>{
+      if(history.length===0)return;
+      const last=history.pop();
+      board[last.idx]=null;
+      current=last.player;
+      updateStatus(`${current} の番（undoしました）`);
+      renderBoard();
+    });
+
+    renderBoard();
+    updateScores();
+  </script>
+</body>
+</html>
