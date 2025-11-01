@@ -32,7 +32,7 @@
 </head>
 <body>
 
-<h1>オンライン三目並べｖ0.0.12</h1>
+<h1>オンライン三目並べｖ0.0.13</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -130,16 +130,36 @@ function setupRematch(roomId){
   rematchRef.on('value',snap=>{ const data=snap.val()||{}; if(data.hostReady && data.guestReady){ startRematch(); rematchRef.remove(); } });
 }
 document.getElementById('resetBtn').onclick=()=>{ document.getElementById('resetBtn').disabled=true; document.getElementById('resetBtn').textContent='相手の準備を待っています...'; rematchRef.update(isHost?{hostReady:true}:{guestReady:true}); };
-function startRematch(){ board=Array(9).fill(null); gameOver=false; myTurn=isHost; Array.from(boardEl.children).forEach(c=>{c.textContent=''; c.classList.remove('win','draw','disabled');}); document.getElementById('result').textContent=''; const turnInfo=document.getElementById('turnInfo'); turnInfo.classList.remove('winner','loser','drawText'); turnInfo.textContent=myTurn?'あなたの手番！':'相手の手番…'; turnInfo.classList.toggle('active',myTurn); document.getElementById('resetBtn').style.display='none'; document.getElementById('resetBtn').disabled=false; document.getElementById('resetBtn').textContent='もう一度遊ぶ'; render(); }
+function startRematch(){ 
+  board=Array(9).fill(null); gameOver=false; myTurn=isHost; 
+  Array.from(boardEl.children).forEach(c=>{c.textContent=''; c.classList.remove('win','draw','disabled');});
+  document.getElementById('result').textContent=''; 
+  const turnInfo=document.getElementById('turnInfo'); 
+  turnInfo.classList.remove('winner','loser','drawText'); 
+  turnInfo.textContent=myTurn?'あなたの手番！':'相手の手番…'; 
+  turnInfo.classList.toggle('active',myTurn); 
+  document.getElementById('resetBtn').style.display='none'; 
+  document.getElementById('resetBtn').disabled=false; 
+  document.getElementById('resetBtn').textContent='もう一度遊ぶ'; 
+  render(); 
+}
 
 // 退出
-document.getElementById('leaveBtn').onclick=()=>{ if(currentRoomId) leaveRoom(currentRoomId); };
+document.getElementById('leaveBtn').onclick = async () => {
+  if(!currentRoomId) return;
+  document.getElementById('chatLog').innerHTML = '';
+  await leaveRoom(currentRoomId);
+};
+
 async function leaveRoom(roomId){
   if(!roomRef) return;
   if(isHost) await roomRef.update({host:null});
   else await roomRef.update({guest:null});
-  checkRoomEmpty(roomId); resetGameUI(); currentRoomId=null;
+  checkRoomEmpty(roomId); 
+  resetGameUI(); 
+  currentRoomId=null;
 }
+
 function resetGameUI(){
   board=Array(9).fill(null); myMark=opMark='-'; myTurn=false; gameOver=false;
   roomRef=null; chatRef=null; rematchRef=null;
@@ -162,13 +182,17 @@ function updateRoomList(){
       const div=document.createElement('div');
       div.className='roomItem';
       div.innerHTML=`<span>${rid} (ホスト: ${room.host||'-'})</span> <span>${room.host && room.guest?'満':'参加'}</span>`;
-      div.onclick=()=>{ document.getElementById('roomId').value=rid; joinRoom(rid); };
+      div.onclick=()=>{ 
+        const name = document.getElementById('playerName').value.trim();
+        if(!name){ alert('名前を入力してください'); return; }
+        document.getElementById('roomId').value = rid; 
+        joinRoom(rid); 
+      };
       roomListEl.appendChild(div);
     });
   });
 }
-
-// 空の部屋は削除
+updateRoomList();
 function checkRoomEmpty(roomId){
   db.ref('rooms/'+roomId).get().then(snap=>{
     const data=snap.val();
@@ -176,14 +200,14 @@ function checkRoomEmpty(roomId){
   });
 }
 
-updateRoomList();
-
 // DataChannel & チャット
 function setupDC(){
   dc.onopen=()=>{
     document.getElementById('status').textContent='接続済み';
     if(isHost){ myMark='X'; opMark='O'; myTurn=true; send({type:'assign',mark:'O',yourTurn:false}); }
-    render(); document.getElementById('chatInput').disabled=false; document.getElementById('chatSend').disabled=false;
+    render(); 
+    document.getElementById('chatInput').disabled=false; 
+    document.getElementById('chatSend').disabled=false;
   };
   dc.onmessage=e=>{
     const data=JSON.parse(e.data);
@@ -202,7 +226,8 @@ function setupChat(roomId){
 
 // create/join
 async function createRoom(roomId){
-  playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
+  playerName=document.getElementById('playerName').value.trim();
+  if(!playerName){ alert('名前を入力してください'); return; }
   roomRef=db.ref('rooms/'+roomId);
   const snap = await roomRef.get();
   if(snap.exists()){ alert('この部屋IDは既に存在します。'); return; }
@@ -215,6 +240,15 @@ async function createRoom(roomId){
   await roomRef.update({offer});
   document.getElementById('status').textContent='部屋作成。参加者を待っています...';
   setupChat(roomId); setupRematch(roomId); document.getElementById('leaveBtn').style.display='inline-block';
+  
+  // 相手退出監視
+  roomRef.on('value', snap=>{
+    const data = snap.val();
+    if(!data) return;
+    if(isHost && !data.guest && !gameOver){ alert('相手が退出しました'); resetGameUI(); document.getElementById('status').textContent='部屋作成。参加者を待っています...'; }
+    if(!isHost && !data.host && !gameOver){ alert('相手が退出しました'); resetGameUI(); document.getElementById('status').textContent='参加者を待っています...'; }
+  });
+  
   roomRef.on('value', async snap=>{
     const data=snap.val();
     if(!pc.currentRemoteDescription && data?.answer){ await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }
@@ -223,7 +257,8 @@ async function createRoom(roomId){
 }
 
 async function joinRoom(roomId){
-  playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
+  playerName=document.getElementById('playerName').value.trim();
+  if(!playerName){ alert('名前を入力してください'); return; }
   currentRoomId=roomId;
   roomRef=db.ref('rooms/'+roomId);
   const snap=await roomRef.get(); if(!snap.exists()){ alert('部屋が見つかりません'); return; }
@@ -238,6 +273,14 @@ async function joinRoom(roomId){
   await roomRef.update({answer});
   document.getElementById('status').textContent='接続中...';
   setupChat(roomId); setupRematch(roomId); document.getElementById('leaveBtn').style.display='inline-block';
+  
+  // 相手退出監視
+  roomRef.on('value', snap=>{
+    const data = snap.val();
+    if(!data) return;
+    if(!isHost && !data.host && !gameOver){ alert('相手が退出しました'); resetGameUI(); document.getElementById('status').textContent='参加者を待っています...'; }
+  });
+  
   roomRef.child('offerCandidates').on('child_added', async s=>{ try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch{} });
 }
 
@@ -245,32 +288,17 @@ async function joinRoom(roomId){
 document.getElementById('createBtn').onclick = () => {
     const id = document.getElementById('roomId').value.trim();
     const name = document.getElementById('playerName').value.trim();
-    if (!name) { 
-        alert('名前を入力してください'); 
-        return; 
-    }
-    if (!id) {
-        alert('部屋コードを入力してください');
-        return;
-    }
+    if (!name) { alert('名前を入力してください'); return; }
+    if (!id) { alert('部屋コードを入力してください'); return; }
     createRoom(id);
 };
-
 document.getElementById('joinBtn').onclick = () => {
     const id = document.getElementById('roomId').value.trim();
     const name = document.getElementById('playerName').value.trim();
-    if (!name) { 
-        alert('名前を入力してください'); 
-        return; 
-    }
-    if (!id) {
-        alert('部屋コードを入力してください');
-        return;
-    }
+    if (!name) { alert('名前を入力してください'); return; }
+    if (!id) { alert('部屋コードを入力してください'); return; }
     joinRoom(id);
 };
-
-
 </script>
 </body>
 </html>
