@@ -30,7 +30,7 @@
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.6</h1>
+<h1>オンライン三目並べｖ0.0.7</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -227,25 +227,45 @@ async function createRoom(roomId){
 }
 
 async function joinRoom(roomId){
-  playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
-  isHost=false;
-  roomRef=db.ref('rooms/'+roomId);
-  const snap=await roomRef.get();
-  if(!snap.exists()){alert('部屋が見つかりません');return;}
-  const offer=snap.val().offer;
-  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-  pc.ondatachannel=e=>{dc=e.channel;setupDC();};
-  pc.onicecandidate=e=>{if(e.candidate)roomRef.child('answerCandidates').push(e.candidate.toJSON());};
+  playerName = document.getElementById('playerName').value.trim() || 'プレイヤー';
+  isHost = false;
+  roomRef = db.ref('rooms/' + roomId);
+
+  const snap = await roomRef.get();
+  if(!snap.exists()){
+    alert('部屋が見つかりません'); 
+    return;
+  }
+
+  // 既存プレイヤー数チェック
+  const data = snap.val();
+  const players = [data.host, data.guest].filter(Boolean);
+  if(players.length >= 2){
+    alert('この部屋は既に2人が参加しています');
+    return;
+  }
+
+  // 自分を guest として登録
+  await roomRef.update({guest: playerName});
+
+  const offer = data.offer;
+  pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc.ondatachannel = e => { dc = e.channel; setupDC(); };
+  pc.onicecandidate = e => { if(e.candidate) roomRef.child('answerCandidates').push(e.candidate.toJSON()); };
   await pc.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
+  const answer = await pc.createAnswer(); 
+  await pc.setLocalDescription(answer);
   await roomRef.update({answer});
+
   document.getElementById('status').textContent='接続中...';
   setupChat(roomId);
   setupRematch(roomId);
-  roomRef.child('offerCandidates').on('child_added',async s=>{
-    try{await pc.addIceCandidate(new RTCIceCandidate(s.val()));}catch{}
+
+  roomRef.child('offerCandidates').on('child_added', async s => {
+    try { await pc.addIceCandidate(new RTCIceCandidate(s.val())); } catch {}
   });
 }
+
 
 // ==== DataChannel ====
 function setupDC(){
