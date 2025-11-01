@@ -30,7 +30,7 @@
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.8</h1>
+<h1>オンライン三目並べｖ0.0.9</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -184,23 +184,29 @@ function startRematch() {
 
   document.getElementById('result').textContent = '';
   const turnInfo = document.getElementById('turnInfo');
-  turnInfo.classList.remove('winner', 'loser', 'drawText');
+  turnInfo.classList.remove('winner', 'loser','drawText');
   turnInfo.textContent = myTurn ? 'あなたの手番！' : '相手の手番…';
   turnInfo.classList.toggle('active', myTurn);
 
-  document.getElementById('resetBtn').style.display = 'none';
-  document.getElementById('resetBtn').disabled = false;
-  document.getElementById('resetBtn').textContent = 'もう一度遊ぶ';
+  document.getElementById('resetBtn').style.display='none';
+  document.getElementById('resetBtn').disabled=false;
+  document.getElementById('resetBtn').textContent='もう一度遊ぶ';
   render();
 }
 
 // ==== Firebaseシグナリング ====
 async function createRoom(roomId){
   playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
-  isHost=true;
   roomRef=db.ref('rooms/'+roomId);
-  await roomRef.remove();
+  
+  // 同じ部屋が存在する場合は作れない
+  const snap = await roomRef.get();
+  if(snap.exists()){
+    alert('この部屋IDは既に存在します。別のIDを使用してください。');
+    return;
+  }
 
+  isHost=true;
   pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
   dc=pc.createDataChannel('game');
   setupDC();
@@ -224,6 +230,7 @@ async function createRoom(roomId){
   });
 }
 
+// joinRoomは以前のまま（2人制限チェック付き）
 async function joinRoom(roomId){
   playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
   isHost=false;
@@ -257,7 +264,7 @@ async function joinRoom(roomId){
   });
 }
 
-// ==== DataChannel ====
+// ==== DataChannel & Chat の setup は以前と同じ ====
 function setupDC(){
   dc.onopen=()=>{
     document.getElementById('status').textContent='接続済み';
@@ -269,23 +276,16 @@ function setupDC(){
     document.getElementById('chatInput').disabled=false;
     document.getElementById('chatSend').disabled=false;
   };
-
   dc.onmessage=e=>{
     const data=JSON.parse(e.data);
-    if(data.type==='move'){
-      board[data.i]=opMark; myTurn=true; render();
-      const result=winCheck(); if(result){gameOver=true;showResult(result.winner,result.line);}
-    }else if(data.type==='assign'){
-      myMark=data.mark; opMark=(data.mark==='X'?'O':'X');
-      myTurn=data.yourTurn||false; render();
-    }else if(data.type==='gameover'){
-      gameOver=true; showResult(data.winner,data.line);
-    }
+    if(data.type==='move'){ board[data.i]=opMark; myTurn=true; render(); const r=winCheck(); if(r){gameOver=true;showResult(r.winner,r.line);} }
+    else if(data.type==='assign'){ myMark=data.mark; opMark=(data.mark==='X'?'O':'X'); myTurn=data.yourTurn||false; render(); }
+    else if(data.type==='gameover'){ gameOver=true; showResult(data.winner,data.line); }
   };
 }
 function send(obj){dc.send(JSON.stringify(obj));}
 
-// ==== チャット ====
+// ==== Chat ====
 function setupChat(roomId){
   const chatLog=document.getElementById('chatLog');
   const chatSend=document.getElementById('chatSend');
