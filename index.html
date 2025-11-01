@@ -1,53 +1,108 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>オンライン三目並べv0.0.1</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>オンライン三目並べ</title>
 <style>
-  body{font-family:sans-serif;background:#0f1724;color:#fff;text-align:center;padding:20px;}
-  #board{display:grid;grid-template-columns:repeat(3,100px);gap:5px;justify-content:center;margin-top:20px;}
-  .cell{width:100px;height:100px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:48px;cursor:pointer;border-radius:8px;}
-  .cell.disabled{opacity:0.5;cursor:not-allowed;}
-  input,button{font-size:16px;padding:8px;margin:4px;border-radius:6px;border:none;}
-  #chatArea{margin-top:20px;width:300px;margin-inline:auto;text-align:left;}
-  #chatLog{height:150px;overflow-y:auto;background:#1e293b;padding:10px;border-radius:6px;}
-  .msg.self{text-align:right;color:#38bdf8;}
-  .msg.other{text-align:left;color:#facc15;}
-  #controls{margin-top:10px;}
+:root{--bg:#071022;--panel:#0b1a2a;--accent:#06b6d4;--muted:#94a3b8;--win:#16a34a}
+body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","メイリオ",sans-serif;background:linear-gradient(180deg,var(--bg),#042034);color:#e6eef6;padding:18px;display:flex;justify-content:center}
+.wrap{width:1100px;max-width:96vw;display:grid;grid-template-columns:320px 1fr;gap:16px}
+.card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:10px;padding:12px;border:1px solid rgba(255,255,255,0.03)}
+h2{color:var(--accent);margin:6px 0 12px 0;font-size:16px}
+input,button,select{font-size:14px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+button.primary{background:var(--accent);color:#02121a;border:none;font-weight:700;cursor:pointer}
+#roomsList{max-height:260px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.roomRow{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px;background:rgba(0,0,0,0.12);border-radius:8px}
+#board{display:grid;grid-template-columns:repeat(3,120px);gap:8px;justify-content:center;margin-top:12px}
+.cell{width:120px;height:120px;display:flex;align-items:center;justify-content:center;font-size:52px;background:rgba(255,255,255,0.02);border-radius:10px;user-select:none;cursor:pointer}
+.cell.disabled{opacity:0.5;cursor:not-allowed}
+#chatLog{max-height:180px;overflow:auto;background:rgba(0,0,0,0.12);padding:8px;border-radius:8px;margin-top:8px}
+.chatMsg.self{text-align:right;color:#bde8ff;margin:4px 0}
+.chatMsg.other{text-align:left;color:#ffd99b;margin:4px 0}
+.playerBox{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)}
+.speaking{color:#4ade80;font-weight:700}
+.meter{height:8px;background:#051827;border-radius:4px;margin-top:6px;width:100%}
+.small{font-size:13px;padding:6px 8px;border-radius:8px}
+footer{margin-top:12px;color:var(--muted);font-size:13px}
+@media(max-width:980px){.wrap{grid-template-columns:1fr}.cell{width:90px;height:90px;font-size:40px}}
 </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h2>プレイヤー設定</h2>
+    <div>名前: <input id="playerName" placeholder="あなたの名前" style="width:100%"></div>
+    <div style="margin-top:8px">
+      <button id="micToggle" class="small">マイク許可 / 停止</button>
+      <div id="micStatus" style="margin-top:6px;color:var(--muted)">マイク: 未接続</div>
+    </div>
+
+    <h2 style="margin-top:12px">ルーム</h2>
+    <div style="display:flex;gap:8px">
+      <input id="roomIdInput" placeholder="部屋コード(空で自動生成)" style="flex:1"/>
+      <button id="createRoomBtn" class="small">作成</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button id="joinBtn" class="primary">参加 / 自動マッチ</button>
+      <button id="leaveBtn" class="small">退出</button>
+    </div>
+
+    <h3 style="margin-top:12px">公開ルーム一覧</h3>
+    <div id="roomsList"></div>
+    <button id="refreshRooms" class="small" style="margin-top:8px">更新</button>
+
+    <h3 style="margin-top:12px">あなたの戦績</h3>
+    <div id="stats">Wins:0 / Losses:0 / Draws:0</div>
+
+    <footer>
+      ｖ0.0.1
+    </footer>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2>オンライン三目並べ</h2>
+      <div id="connStatus" style="color:var(--muted)">状態: 切断</div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <div class="playerBox" style="flex:1">
+        あなた: <span id="myName">-</span> (<span id="myMark">-</span>) <span id="mySpeaking" style="float:right"></span>
+        <div class="meter"><div id="myMeter" style="height:8px;width:0%;background:linear-gradient(90deg,#06b6d4,#38bdf8);border-radius:4px"></div></div>
+      </div>
+      <div class="playerBox" style="flex:1">
+        相手: <span id="opName">-</span> (<span id="opMark">-</span>) <span id="opSpeaking" style="float:right"></span>
+        <div class="meter"><div id="opMeter" style="height:8px;width:0%;background:linear-gradient(90deg,#facc15,#f97316);border-radius:4px"></div></div>
+      </div>
+    </div>
+
+    <div id="board"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <div>ターン: <span id="turnInfo">-</span></div>
+      <div>結果: <span id="result">-</span></div>
+      <div><button id="resetBtn" class="small">リセット</button></div>
+    </div>
+
+    <h3 style="margin-top:12px">チャット</h3>
+    <div id="chatLog"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="chatInput" placeholder="メッセージ" style="flex:1">
+      <button id="sendChat" class="small">送信</button>
+    </div>
+  </div>
+</div>
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
-</head>
-<body>
-<h1>オンライン三目並べ</h1>
-
-<div>
-  <input id="roomId" placeholder="部屋コードを入力" />
-  <button id="createBtn">部屋を作る</button>
-  <button id="joinBtn">参加する</button>
-  <button id="resetBtn">リセット</button>
-</div>
-
-<div id="status">状態: 未接続</div>
-<div id="turnInfo"></div>
-<div id="board"></div>
-<div id="result"></div>
-
-<!-- チャット -->
-<div id="chatArea">
-  <h3>💬 チャット</h3>
-  <div id="chatLog"></div>
-  <div id="controls">
-    <input id="chatInput" placeholder="メッセージを入力" style="width:200px;">
-    <button id="sendBtn">送信</button>
-  </div>
-</div>
 
 <script>
-// ==== Firebase設定（★あなたのFirebase設定に置き換えてください） ====
+/* =========================
+  必ずここをあなたの Firebase 設定に書き換えてください
+  (Firebase コンソール → プロジェクト設定 → ウェブアプリ)
+========================= */
   const firebaseConfig = {
     apiKey: "AIzaSyAI3pNSCaU2teHdqa1Rh1eLoQu1VZYtoh4",
     authDomain: "webrtc-gamesg.firebaseapp.com",
@@ -60,170 +115,585 @@
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ==== WebRTC + ゲームロジック ====
-let pc, dc;
+/* ---------------- state ---------------- */
+let pc = null;
+let dc = null;
+let localStream = null;
+let remoteStream = null;
+let playerId = null;
+let playerName = null;
+let roomId = null;
+let roomRef = null;
+let isHost = false;
+let boardState = Array(9).fill(null);
 let myMark = '-', opMark = '-';
 let myTurn = false;
-let board = Array(9).fill(null);
-let roomRef;
-let isHost = false;
+let stats = {wins:0,losses:0,draws:0};
+let localAnalyser = null;
+let remoteAnalyser = null;
+let localMeterInterval = null;
+let remoteMeterInterval = null;
+let opAudioEl = null;
 
-// 盤面生成
+/* ---------------- UI refs ---------------- */
+const roomsListEl = document.getElementById('roomsList');
+const roomIdInput = document.getElementById('roomIdInput');
+const createRoomBtn = document.getElementById('createRoomBtn');
+const joinBtn = document.getElementById('joinBtn');
+const leaveBtn = document.getElementById('leaveBtn');
+const refreshRooms = document.getElementById('refreshRooms');
+const playerNameInput = document.getElementById('playerName');
+const micToggle = document.getElementById('micToggle');
+const micStatus = document.getElementById('micStatus');
+const statsEl = document.getElementById('stats');
+
+const connStatus = document.getElementById('connStatus');
+const myNameEl = document.getElementById('myName');
+const opNameEl = document.getElementById('opName');
+const myMarkEl = document.getElementById('myMark');
+const opMarkEl = document.getElementById('opMark');
+const mySpeaking = document.getElementById('mySpeaking');
+const opSpeaking = document.getElementById('opSpeaking');
+const myMeter = document.getElementById('myMeter');
+const opMeter = document.getElementById('opMeter');
+
 const boardEl = document.getElementById('board');
-for(let i=0;i<9;i++){
-  const cell=document.createElement('div');
-  cell.className='cell';
-  cell.dataset.i=i;
-  cell.onclick=()=>makeMove(i);
-  boardEl.appendChild(cell);
+const turnInfo = document.getElementById('turnInfo');
+const resultEl = document.getElementById('result');
+const resetBtn = document.getElementById('resetBtn');
+
+const chatLog = document.getElementById('chatLog');
+const chatInput = document.getElementById('chatInput');
+const sendChat = document.getElementById('sendChat');
+
+/* ---------------- UI initialization ---------------- */
+function initBoardUI(){
+  boardEl.innerHTML = '';
+  for(let i=0;i<9;i++){
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.dataset.i = i;
+    c.onclick = ()=> onCellClick(i);
+    boardEl.appendChild(c);
+  }
+  renderBoard();
+}
+initBoardUI();
+
+function renderBoard(){
+  for(let i=0;i<9;i++){
+    const c = boardEl.children[i];
+    c.textContent = boardState[i] || '';
+    c.classList.toggle('disabled', !myTurn || !!boardState[i]);
+  }
+  turnInfo.textContent = myTurn ? 'あなたの手番 (' + myMark + ')' : '相手の手番 (' + opMark + ')';
 }
 
-function render(){
-  board.forEach((v,i)=>{
-    const c=boardEl.children[i];
-    c.textContent=v||'';
-    c.classList.toggle('disabled',!myTurn||v);
+/* ---------------- Player ID & name ---------------- */
+(function boot(){
+  playerId = localStorage.getItem('webrtc_playerId');
+  if(!playerId){ playerId = Math.random().toString(36).slice(2,9); localStorage.setItem('webrtc_playerId', playerId); }
+  const storedName = localStorage.getItem('webrtc_playerName') || '';
+  playerNameInput.value = storedName;
+  ensurePlayerName();
+  playerNameInput.addEventListener('change', ()=>{
+    localStorage.setItem('webrtc_playerName', playerNameInput.value.trim());
+    ensurePlayerName();
   });
-  document.getElementById('turnInfo').textContent=myTurn?'あなたの手番 ('+myMark+')':'相手の手番 ('+opMark+')';
+})();
+
+function ensurePlayerName(){
+  playerName = (playerNameInput.value.trim() || ('Player-' + playerId.slice(0,4)));
+  myNameEl.textContent = playerName;
+  loadStats();
 }
-function winCheck(){
-  const lines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  for(const [a,b,c] of lines){
-    if(board[a]&&board[a]==board[b]&&board[a]==board[c]) return board[a];
+
+/* ---------------- Rooms listing & auto-match ---------------- */
+async function fetchRooms(){
+  roomsListEl.innerHTML = '<div style="color:var(--muted)">取得中…</div>';
+  const snap = await db.ref('rooms').orderByChild('createdAt').once('value');
+  const data = snap.val() || {};
+  roomsListEl.innerHTML = '';
+  const rows = Object.entries(data).sort((a,b)=> (b[1].playersCount||0)-(a[1].playersCount||0));
+  if(rows.length === 0){ roomsListEl.innerHTML = '<div style="color:var(--muted)">利用可能なルームがありません</div>'; return; }
+  rows.forEach(([id, info])=>{
+    const row = document.createElement('div');
+    row.className = 'roomRow';
+    row.innerHTML = `<div><strong>${id}</strong><div style="font-size:12px;color:var(--muted)">players: ${info.playersCount||0}</div></div>`;
+    const btn = document.createElement('button');
+    btn.className = 'small';
+    btn.textContent = (info.playersCount||0) < 2 ? '参加' : '満員';
+    btn.disabled = (info.playersCount||0) >= 2;
+    btn.onclick = ()=> { roomIdInput.value = id; joinToRoom(id); };
+    row.appendChild(btn);
+    roomsListEl.appendChild(row);
+  });
+}
+refreshRooms.onclick = fetchRooms;
+fetchRooms();
+
+async function autoMatch(){
+  const snap = await db.ref('rooms').once('value');
+  const rooms = snap.val() || {};
+  for(const id of Object.keys(rooms)){
+    if((rooms[id].playersCount||0) < 2) return id;
   }
-  if(board.every(Boolean)) return 'draw';
+  return 'room-' + Math.random().toString(36).slice(2,8);
+}
+
+/* ---------------- Microphone / audio meters ---------------- */
+micToggle.onclick = async ()=>{
+  if(localStream){
+    stopLocalAudio();
+    return;
+  }
+  try{
+    localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    micStatus.textContent = 'マイク: 接続中';
+    micToggle.textContent = 'マイク停止';
+    if(pc) attachLocalTracks();
+    setupLocalMeter();
+  }catch(e){
+    console.error('mic err', e);
+    alert('マイクへのアクセスが拒否されました。権限を確認してください。');
+  }
+};
+function stopLocalAudio(){
+  if(!localStream) return;
+  localStream.getTracks().forEach(t=>t.stop());
+  localStream = null;
+  micStatus.textContent = 'マイク: 停止';
+  micToggle.textContent = 'マイク許可 / 停止';
+  if(localAnalyser){ localAnalyser.disconnect(); localAnalyser = null; }
+  clearInterval(localMeterInterval);
+  myMeter.style.width = '0%';
+}
+function setupLocalMeter(){
+  try{
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(localStream);
+    localAnalyser = audioCtx.createAnalyser();
+    localAnalyser.fftSize = 256;
+    src.connect(localAnalyser);
+    localMeterInterval = setInterval(()=>{
+      const arr = new Uint8Array(localAnalyser.frequencyBinCount);
+      localAnalyser.getByteFrequencyData(arr);
+      const sum = arr.reduce((a,b)=>a+b,0);
+      const avg = sum / arr.length;
+      const pct = Math.min(100, Math.round((avg/128)*100));
+      myMeter.style.width = pct + '%';
+      mySpeaking.textContent = pct > 12 ? '🟢' : '';
+      mySpeaking.className = pct > 12 ? 'speaking' : '';
+    }, 150);
+  }catch(e){ console.warn('local meter err', e); }
+}
+
+/* ---------------- WebRTC & signaling ---------------- */
+async function preparePeerConnection(){
+  pc = new RTCPeerConnection({ iceServers:[ { urls:'stun:stun.l.google.com:19302' } ] });
+
+  // attach local audio tracks if present
+  if(localStream){
+    localStream.getAudioTracks().forEach(t => pc.addTrack(t, localStream));
+  }
+
+  // when remote track arrives
+  remoteStream = new MediaStream();
+  pc.ontrack = (ev)=> {
+    ev.streams.forEach(s=> s.getAudioTracks().forEach(t => remoteStream.addTrack(t)));
+    ensureRemoteAudioEl();
+    opAudioEl.srcObject = remoteStream;
+    opAudioEl.play().catch(()=>{});
+    setupRemoteMeter();
+  };
+
+  // datachannel receive (joiner)
+  pc.ondatachannel = (ev)=>{
+    dc = ev.channel;
+    setupDataChannel();
+  };
+
+  pc.onicecandidate = (e)=>{
+    if(!e.candidate) return;
+    if(!roomRef) return;
+    const path = isHost ? 'offerCandidates' : 'answerCandidates';
+    roomRef.child(path).push(e.candidate.toJSON());
+  };
+
+  pc.onconnectionstatechange = ()=> {
+    connStatus.textContent = '状態: ' + pc.connectionState;
+  };
+
+  // if host, create datachannel
+  if(isHost){
+    dc = pc.createDataChannel('game');
+    setupDataChannel();
+  }
+}
+
+/* datachannel wiring */
+function setupDataChannel(){
+  if(!dc) return;
+  dc.onopen = ()=> {
+    console.log('DataChannel open');
+    connStatus.textContent = 'DataChannel: open';
+    // identity broadcast
+    sendDC({ type:'identity', id:playerId, name:playerName });
+    // host assigns marks and turn
+    if(isHost){
+      myMark = 'X';
+      opMark = 'O';
+      myMarkEl.textContent = myMark;
+      opMarkEl.textContent = opMark;
+      myTurn = true;
+      renderBoard();
+      // tell opponent their mark and that they are not first
+      sendDC({ type:'assign', mark:'O', yourTurn:false });
+    }
+  };
+  dc.onmessage = ev => {
+    const data = safeJSON(ev.data);
+    if(!data) return;
+    handleAppMessage(data);
+  };
+  dc.onclose = ()=> console.log('dc closed');
+}
+
+/* safe JSON parse */
+function safeJSON(s){
+  try{ return JSON.parse(s); }catch(e){ return null; }
+}
+
+/* wrapper send */
+function sendDC(obj){
+  if(dc && dc.readyState === 'open') dc.send(JSON.stringify(obj));
+}
+
+/* create room (host) */
+async function createRoomManual(id){
+  ensurePlayerName();
+  roomId = id || ('room-' + Math.random().toString(36).slice(2,8));
+  isHost = true;
+  roomRef = db.ref('rooms/' + roomId);
+  // create entry with host as player
+  await roomRef.set({ createdAt: Date.now(), playersCount: 1, players: { [playerId]: { name: playerName } } });
+  // listen for answer and candidates
+  await preparePeerConnection();
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await roomRef.update({ offer: offer });
+
+  roomRef.child('answer').on('value', async snap => {
+    const val = snap.val();
+    if(val && !pc.currentRemoteDescription){
+      await pc.setRemoteDescription(new RTCSessionDescription(val));
+      connStatus.textContent = '状態: answer 受信';
+    }
+  });
+
+  roomRef.child('answerCandidates').on('child_added', async s => {
+    const cand = s.val();
+    try{ await pc.addIceCandidate(new RTCIceCandidate(cand)); }catch(e){ console.warn(e); }
+  });
+
+  // observe players & chat
+  roomRef.child('players').on('value', snap => updatePlayersUI(snap.val() || {}));
+  roomRef.child('chat').on('child_added', snap => {
+    const m = snap.val();
+    appendChat(m.name, m.text, m.id === playerId ? 'self' : 'other');
+  });
+
+  // create offerCandidates listener (not strictly necessary but keep)
+  roomRef.child('offerCandidates').on('child_added', snap => { /* host can ignore */ });
+
+  connStatus.textContent = 'ルーム作成: ' + roomId;
+  fetchRooms();
+}
+
+/* join flow */
+async function joinToRoom(id){
+  ensurePlayerName();
+  roomId = id;
+  roomRef = db.ref('rooms/' + roomId);
+  const snap = await roomRef.once('value');
+  if(!snap.exists()){ alert('部屋が見つかりません'); return; }
+
+  // add self to players and increment count
+  await roomRef.child('players/' + playerId).set({ name: playerName });
+  await roomRef.child('playersCount').transaction(c => (c||0) + 1);
+
+  isHost = false;
+  await preparePeerConnection();
+
+  const offerSnap = await roomRef.child('offer').once('value');
+  const offer = offerSnap.val();
+  if(!offer){ alert('Offerが見つかりません'); return; }
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await roomRef.update({ answer: answer });
+
+  // handle incoming ICE candidates from host
+  roomRef.child('offerCandidates').on('child_added', async s => {
+    const cand = s.val();
+    try{ await pc.addIceCandidate(new RTCIceCandidate(cand)); }catch(e){ console.warn(e); }
+  });
+
+  // send candidates are handled by pc.onicecandidate -> answerCandidates
+
+  roomRef.child('players').on('value', snap => updatePlayersUI(snap.val() || {}));
+  roomRef.child('chat').on('child_added', snap => {
+    const m = snap.val();
+    appendChat(m.name, m.text, m.id === playerId ? 'self' : 'other');
+  });
+
+  connStatus.textContent = 'ルーム参加: ' + roomId;
+  fetchRooms();
+}
+
+/* wait for DC open handled in setupDataChannel -> assign */
+function handleAppMessage(data){
+  switch(data.type){
+    case 'identity':
+      // show opponent name if not self
+      if(data.id && data.id !== playerId){
+        opNameEl.textContent = data.name || '相手';
+        // also write into DB players map if missing
+        if(roomRef) roomRef.child('players/' + data.id).once('value').then(snap=>{
+          if(!snap.exists()) roomRef.child('players/' + data.id).set({ name: data.name || 'Player' });
+        });
+      }
+      break;
+    case 'assign':
+      // joiner receives assign with mark and yourTurn flag
+      opMark = (data.mark === 'X') ? 'X' : 'X'; // data.mark is opponent's mark for receiver
+      myMark = data.mark;
+      opMark = (myMark === 'X') ? 'O' : 'X';
+      myMarkEl.textContent = myMark;
+      opMarkEl.textContent = opMark;
+      myTurn = !!data.yourTurn;
+      renderBoard();
+      break;
+    case 'move':
+      boardState[data.pos] = data.mark;
+      // if opponent moved, it's your turn if game not ended
+      myTurn = (data.mark !== myMark);
+      renderBoard();
+      checkGameEndAndNotify();
+      break;
+    case 'chat':
+      appendChat(data.name || '相手', data.text, data.id === playerId ? 'self' : 'other');
+      // persist chat in DB
+      if(roomRef) roomRef.child('chat').push({ id: data.id, name: data.name, text: data.text, ts: Date.now() });
+      break;
+    case 'gameover':
+      handleGameOver(data.winner);
+      break;
+    case 'reset':
+      resetLocalBoard();
+      break;
+    default:
+      console.log('unknown dc msg', data);
+  }
+}
+
+/* ---------------- Game actions ---------------- */
+function onCellClick(i){
+  if(!dc || dc.readyState !== 'open'){ alert('まだ接続されていません'); return; }
+  if(!myTurn || boardState[i]) return;
+  boardState[i] = myMark;
+  renderBoard();
+  sendDC({ type:'move', pos: i, mark: myMark });
+  myTurn = false;
+  checkGameEndAndNotify();
+}
+
+function checkGameEndAndNotify(){
+  const winner = calcWinner(boardState);
+  if(winner){
+    sendDC({ type:'gameover', winner });
+    handleGameOver(winner);
+  } else if(boardState.every(Boolean)){
+    sendDC({ type:'gameover', winner: 'draw' });
+    handleGameOver('draw');
+  }
+}
+
+function calcWinner(b){
+  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for(const [a,b1,c] of lines){
+    if(b[a] && b[a] === b[b1] && b[a] === b[c]) return b[a];
+  }
   return null;
 }
-function makeMove(i){
-  if(!myTurn||board[i])return;
-  board[i]=myMark;
-  send({type:'move',i});
-  myTurn=false;render();
-  const w=winCheck();
-  if(w){
-    send({type:'gameover',winner:w});
-    showResult(w);
+
+async function handleGameOver(winner){
+  if(winner === 'draw'){
+    resultEl.textContent = '引き分け';
+    await saveStats('draw');
+  } else if(winner === myMark){
+    resultEl.textContent = 'あなたの勝ち';
+    await saveStats('win');
+  } else {
+    resultEl.textContent = '相手の勝ち';
+    await saveStats('loss');
   }
 }
-function showResult(w){
-  document.getElementById('result').textContent=(w==='draw')?'引き分け':(w===myMark?'あなたの勝ち!':'相手の勝ち');
-  myTurn=false;render();
+
+/* reset */
+resetBtn.onclick = ()=>{
+  resetLocalBoard();
+  sendDC({ type:'reset' });
+};
+function resetLocalBoard(){
+  boardState = Array(9).fill(null);
+  resultEl.textContent = '';
+  myTurn = isHost; // host first
+  renderBoard();
 }
 
-// ==== Firebaseシグナリング ====
-async function createRoom(roomId){
-  isHost=true;
-  roomRef=db.ref('rooms/'+roomId);
-  roomRef.remove();
-  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-  dc=pc.createDataChannel('chat');
-  setupDC();
-  pc.onicecandidate=e=>{ if(e.candidate){ roomRef.child('offerCandidates').push(e.candidate.toJSON()); }};
-  const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-  await roomRef.set({offer:offer});
-  document.getElementById('status').textContent='部屋作成完了。相手が参加するのを待っています…';
+/* ---------------- Chat UI ---------------- */
+function appendChat(name, text, cls='other'){
+  const d = document.createElement('div');
+  d.className = 'chatMsg ' + cls;
+  d.textContent = name + ': ' + text;
+  chatLog.appendChild(d);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+sendChat.onclick = ()=>{
+  const txt = chatInput.value.trim();
+  if(!txt) return;
+  appendChat(playerName, txt, 'self');
+  // send via DC and persist
+  sendDC({ type:'chat', id: playerId, name: playerName, text: txt });
+  if(roomRef) roomRef.child('chat').push({ id: playerId, name: playerName, text: txt, ts: Date.now() });
+  chatInput.value = '';
+};
 
-  roomRef.on('value', async snap=>{
-    const data=snap.val();
-    if(!pc.currentRemoteDescription && data?.answer){
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      document.getElementById('status').textContent='接続中...';
+/* ---------------- Players UI update ---------------- */
+function updatePlayersUI(playersMap){
+  const ids = Object.keys(playersMap || {});
+  const otherId = ids.find(id => id !== playerId);
+  myNameEl.textContent = playerName;
+  if(otherId){
+    opNameEl.textContent = playersMap[otherId].name || '相手';
+  } else {
+    opNameEl.textContent = '-';
+  }
+}
+
+/* ---------------- Remote audio & meter ---------------- */
+function ensureRemoteAudioEl(){
+  if(opAudioEl) return;
+  opAudioEl = document.createElement('audio');
+  opAudioEl.autoplay = true;
+  opAudioEl.style.display = 'none';
+  document.body.appendChild(opAudioEl);
+}
+
+function setupRemoteMeter(){
+  try{
+    if(!opAudioEl || !opAudioEl.srcObject) return;
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(opAudioEl.srcObject);
+    remoteAnalyser = audioCtx.createAnalyser();
+    remoteAnalyser.fftSize = 256;
+    src.connect(remoteAnalyser);
+    remoteMeterInterval = setInterval(()=>{
+      if(!remoteAnalyser) return;
+      const arr = new Uint8Array(remoteAnalyser.frequencyBinCount);
+      remoteAnalyser.getByteFrequencyData(arr);
+      const sum = arr.reduce((a,b)=>a+b,0);
+      const avg = sum / arr.length;
+      const pct = Math.min(100, Math.round((avg/128)*100));
+      opMeter.style.width = pct + '%';
+      opSpeaking.textContent = pct > 12 ? '🟢' : '';
+      opSpeaking.className = pct > 12 ? 'speaking' : '';
+    }, 180);
+  }catch(e){ console.warn('remote meter err', e); }
+}
+
+/* attach local audio tracks to pc when available */
+function attachLocalTracks(){
+  if(!pc || !localStream) return;
+  localStream.getAudioTracks().forEach(t => pc.addTrack(t, localStream));
+}
+
+/* ---------------- Stats persistence ---------------- */
+async function loadStats(){
+  ensurePlayerName();
+  const snap = await db.ref('stats/' + playerId).once('value');
+  const val = snap.val();
+  if(val) stats = val;
+  saveStatsToUI();
+}
+function saveStatsToUI(){
+  statsEl.textContent = `Wins:${stats.wins||0} / Losses:${stats.losses||0} / Draws:${stats.draws||0}`;
+}
+async function saveStats(outcome){
+  ensurePlayerName();
+  if(outcome === 'win') stats.wins = (stats.wins||0) + 1;
+  else if(outcome === 'loss') stats.losses = (stats.losses||0) + 1;
+  else stats.draws = (stats.draws||0) + 1;
+  await db.ref('stats/' + playerId).set({ name: playerName, ...stats });
+  saveStatsToUI();
+}
+
+/* ---------------- Cleanup & leaving ---------------- */
+leaveBtn.onclick = async ()=>{
+  if(!roomRef) return;
+  try{
+    await roomRef.child('players/' + playerId).remove();
+    await roomRef.child('playersCount').transaction(c => Math.max(0, (c||1) - 1));
+    const snap = await roomRef.once('value');
+    const val = snap.val() || {};
+    if(!val.players || Object.keys(val.players).length === 0){
+      await roomRef.remove();
     }
-  });
-  roomRef.child('answerCandidates').on('child_added',async s=>{
-    try{await pc.addIceCandidate(new RTCIceCandidate(s.val()));}catch{}
-  });
-}
-
-async function joinRoom(roomId){
-  isHost=false;
-  roomRef=db.ref('rooms/'+roomId);
-  const snap=await roomRef.get();
-  if(!snap.exists()){alert('部屋が見つかりません');return;}
-  const offer=snap.val().offer;
-  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-  pc.ondatachannel=e=>{dc=e.channel;setupDC();};
-  pc.onicecandidate=e=>{ if(e.candidate){ roomRef.child('answerCandidates').push(e.candidate.toJSON()); }};
-  await pc.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
-  await roomRef.update({answer:answer});
-  document.getElementById('status').textContent='接続中...';
-  roomRef.child('offerCandidates').on('child_added',async s=>{
-    try{await pc.addIceCandidate(new RTCIceCandidate(s.val()));}catch{}
-  });
-}
-
-// ==== DataChannel ====
-function setupDC(){
-  dc.onopen=()=>{
-    document.getElementById('status').textContent='接続済み';
-    if(isHost){
-      // ホストがX、先手
-      myMark='X';
-      opMark='O';
-      myTurn=true;
-      send({type:'assign',mark:'O',yourTurn:false});
-    }
-    render();
-  };
-  dc.onmessage=e=>{
-    const data=JSON.parse(e.data);
-    if(data.type==='move'){board[data.i]=opMark;myTurn=true;render();}
-    else if(data.type==='assign'){
-      // 受信側の手番とマークを正しく設定
-      myMark=data.mark;
-      opMark=(data.mark==='X'?'O':'X');
-      myTurn=data.yourTurn || false;
-      render();
-    }
-    else if(data.type==='chat'){addChat('other',data.text);}
-    else if(data.type==='gameover'){showResult(data.winner);}
-    else if(data.type==='reset'){resetBoard();}
-  };
-}
-
-function send(obj){ dc?.send(JSON.stringify(obj)); }
-
-// ==== チャット機能 ====
-const chatLog=document.getElementById('chatLog');
-function addChat(who,text){
-  const div=document.createElement('div');
-  div.className='msg '+who;
-  div.textContent=text;
-  chatLog.appendChild(div);
-  chatLog.scrollTop=chatLog.scrollHeight;
-}
-document.getElementById('sendBtn').onclick=()=>{
-  const msg=document.getElementById('chatInput').value.trim();
-  if(!msg||!dc?.readyState==='open')return;
-  addChat('self',msg);
-  send({type:'chat',text:msg});
-  document.getElementById('chatInput').value='';
+  }catch(e){ console.warn(e); }
+  cleanupAll();
+  fetchRooms();
 };
 
-// ==== リセット ====
-document.getElementById('resetBtn').onclick=()=>{
-  resetBoard();
-  send({type:'reset'});
-};
-function resetBoard(){
-  board=Array(9).fill(null);
-  document.getElementById('result').textContent='';
-  myTurn=isHost; // ホストが先手に戻る
-  render();
+function cleanupAll(){
+  try{ if(dc){ dc.close(); dc=null; } }catch(e){}
+  try{ if(pc){ pc.close(); pc=null; } }catch(e){}
+  try{ if(roomRef){ roomRef.off(); roomRef=null; } }catch(e){}
+  try{ if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; } }catch(e){}
+  try{ if(opAudioEl){ opAudioEl.srcObject=null; opAudioEl.remove(); opAudioEl=null; } }catch(e){}
+  myMark = opMark = '-';
+  myMarkEl.textContent = myMark; opMarkEl.textContent = opMark;
+  opNameEl.textContent = '-';
+  boardState = Array(9).fill(null);
+  myTurn = false;
+  renderBoard();
+  connStatus.textContent = '状態: 切断';
 }
 
-// ==== UIボタン ====
-document.getElementById('createBtn').onclick=()=>{
-  const id=document.getElementById('roomId').value.trim();
-  if(!id){alert('部屋コードを入力');return;}
-  createRoom(id);
+/* ---------------- Utility ---------------- */
+function ensurePlayerName(){ if(!playerNameInput.value.trim()){ playerName = 'Player-' + playerId.slice(0,4); } else playerName = playerNameInput.value.trim(); myNameEl.textContent = playerName; }
+
+/* ---------------- UI Buttons wiring ---------------- */
+createRoomBtn.onclick = async ()=> {
+  ensurePlayerName();
+  const id = roomIdInput.value.trim() || ('room-' + Math.random().toString(36).slice(2,7));
+  await createRoomManual(id);
+  fetchRooms();
 };
-document.getElementById('joinBtn').onclick=()=>{
-  const id=document.getElementById('roomId').value.trim();
-  if(!id){alert('部屋コードを入力');return;}
-  joinRoom(id);
+joinBtn.onclick = async ()=> {
+  ensurePlayerName();
+  let id = roomIdInput.value.trim();
+  if(!id) id = await autoMatch();
+  await joinToRoom(id);
+  fetchRooms();
 };
+document.getElementById('createRoomBtn').addEventListener('click', ()=>{}); // noop (already wired)
+document.getElementById('refreshRooms').addEventListener('click', fetchRooms);
+
+/* ---------------- Start: load stats initial ---------------- */
+loadStats();
+
 </script>
 </body>
 </html>
