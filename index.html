@@ -5,34 +5,33 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>オンライン三目並べ</title>
 <style>
-  body { font-family: sans-serif; background: #0f1724; color: #fff; text-align: center; padding: 20px; }
-  #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; justify-content: center; margin-top: 20px; }
-  .cell { width: 100px; height: 100px; background: #1e293b; display: flex; align-items: center; justify-content: center;
-    font-size: 48px; cursor: pointer; border-radius: 8px; transition: background 0.3s, box-shadow 0.3s; }
-  .cell.disabled { opacity: 0.5; cursor: not-allowed; }
-  .win { background: #22c55e !important; box-shadow: 0 0 20px #22c55e; animation: flash 0.8s ease-in-out infinite alternate; }
-  .draw { opacity: 0.7; }
-  input, button { font-size: 16px; padding: 6px; margin: 4px; }
-  #turnInfo { font-size: 22px; margin-top: 15px; font-weight: bold; transition: color 0.4s, text-shadow 0.4s; }
-  #turnInfo.active { color: #4ade80; text-shadow: 0 0 10px #4ade80; animation: pulse 1s infinite alternate; }
-  .winner { color: #22c55e !important; text-shadow: 0 0 15px #22c55e, 0 0 30px #22c55e; }
-  .loser { color: #f87171 !important; text-shadow: 0 0 15px #f87171; }
-  .drawText { color: #94a3b8 !important; }
-  @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
-  @keyframes flash { from { transform: scale(1); } to { transform: scale(1.05); } }
-  #chatArea { width: 300px; margin: 20px auto; background: #1e293b; padding: 10px; border-radius: 8px; text-align: left; }
-  #chatLog { height: 150px; overflow-y: auto; background: #0f1724; padding: 6px; border-radius: 4px; }
-  .chatMsg { margin: 2px 0; }
-  #roomList { margin: 10px auto; width: 300px; text-align: left; background: #1e293b; padding: 10px; border-radius: 8px; }
-  .roomItem { padding: 4px; margin: 2px 0; background: #0f1724; border-radius: 4px; cursor: pointer; display:flex; justify-content:space-between; }
+body { font-family: sans-serif; background: #0f1724; color: #fff; text-align: center; padding: 20px; }
+#board { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; justify-content: center; margin-top: 20px; }
+.cell { width: 100px; height: 100px; background: #1e293b; display: flex; align-items: center; justify-content: center;
+font-size: 48px; cursor: pointer; border-radius: 8px; transition: background 0.3s, box-shadow 0.3s; }
+.cell.disabled { opacity: 0.5; cursor: not-allowed; }
+.win { background: #22c55e !important; box-shadow: 0 0 20px #22c55e; animation: flash 0.8s ease-in-out infinite alternate; }
+.draw { opacity: 0.7; }
+input, button { font-size: 16px; padding: 6px; margin: 4px; }
+#turnInfo { font-size: 22px; margin-top: 15px; font-weight: bold; transition: color 0.4s, text-shadow 0.4s; }
+#turnInfo.active { color: #4ade80; text-shadow: 0 0 10px #4ade80; animation: pulse 1s infinite alternate; }
+.winner { color: #22c55e !important; text-shadow: 0 0 15px #22c55e, 0 0 30px #22c55e; }
+.loser { color: #f87171 !important; text-shadow: 0 0 15px #f87171; }
+.drawText { color: #94a3b8 !important; }
+@keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
+@keyframes flash { from { transform: scale(1); } to { transform: scale(1.05); } }
+#chatArea { width: 300px; margin: 20px auto; background: #1e293b; padding: 10px; border-radius: 8px; text-align: left; }
+#chatLog { height: 150px; overflow-y: auto; background: #0f1724; padding: 6px; border-radius: 4px; }
+.chatMsg { margin: 2px 0; }
+#roomList { margin: 10px auto; width: 300px; text-align: left; background: #1e293b; padding: 10px; border-radius: 8px; }
+.roomItem { padding: 4px; margin: 2px 0; background: #0f1724; border-radius: 4px; cursor: pointer; display:flex; justify-content:space-between; }
 </style>
-
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
 
-<h1>オンライン三目並べｖ0.0.13</h1>
+<h1>オンライン三目並べｖ0.0.14</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -60,16 +59,15 @@
 </div>
 
 <script>
-// Firebase 設定
-  const firebaseConfig = {
-    apiKey: "AIzaSyAI3pNSCaU2teHdqa1Rh1eLoQu1VZYtoh4",
-    authDomain: "webrtc-gamesg.firebaseapp.com",
-    databaseURL: "https://webrtc-gamesg-default-rtdb.firebaseio.com",
-    projectId: "webrtc-gamesg",
-    storageBucket: "webrtc-gamesg.firebasestorage.app",
-    messagingSenderId: "214608437119",
-    appId: "1:214608437119:web:369a938ed095dded62c44a"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyAI3pNSCaU2teHdqa1Rh1eLoQu1VZYtoh4",
+  authDomain: "webrtc-gamesg.firebaseapp.com",
+  databaseURL: "https://webrtc-gamesg-default-rtdb.firebaseio.com",
+  projectId: "webrtc-gamesg",
+  storageBucket: "webrtc-gamesg.firebasestorage.app",
+  messagingSenderId: "214608437119",
+  appId: "1:214608437119:web:369a938ed095dded62c44a"
+};
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
@@ -87,7 +85,7 @@ let currentRoomId=null;
 const boardEl=document.getElementById('board');
 for(let i=0;i<9;i++){ const cell=document.createElement('div'); cell.className='cell'; cell.onclick=()=>makeMove(i); boardEl.appendChild(cell); }
 
-// 表示
+// 描画
 function render(){
   board.forEach((v,i)=>{ const c=boardEl.children[i]; c.textContent=v||''; c.classList.toggle('disabled',!myTurn||v||gameOver); });
   const turnInfo=document.getElementById('turnInfo');
@@ -132,10 +130,9 @@ function setupRematch(roomId){
 document.getElementById('resetBtn').onclick=()=>{ document.getElementById('resetBtn').disabled=true; document.getElementById('resetBtn').textContent='相手の準備を待っています...'; rematchRef.update(isHost?{hostReady:true}:{guestReady:true}); };
 function startRematch(){ 
   board=Array(9).fill(null); gameOver=false; myTurn=isHost; 
-  Array.from(boardEl.children).forEach(c=>{c.textContent=''; c.classList.remove('win','draw','disabled');});
+  Array.from(boardEl.children).forEach(c=>{c.textContent=''; c.classList.remove('win','draw','disabled');}); 
   document.getElementById('result').textContent=''; 
-  const turnInfo=document.getElementById('turnInfo'); 
-  turnInfo.classList.remove('winner','loser','drawText'); 
+  const turnInfo=document.getElementById('turnInfo'); turnInfo.classList.remove('winner','loser','drawText'); 
   turnInfo.textContent=myTurn?'あなたの手番！':'相手の手番…'; 
   turnInfo.classList.toggle('active',myTurn); 
   document.getElementById('resetBtn').style.display='none'; 
@@ -145,26 +142,19 @@ function startRematch(){
 }
 
 // 退出
-document.getElementById('leaveBtn').onclick = async () => {
-  if(!currentRoomId) return;
-  document.getElementById('chatLog').innerHTML = '';
-  await leaveRoom(currentRoomId);
-};
-
+document.getElementById('leaveBtn').onclick=()=>{ if(currentRoomId) leaveRoom(currentRoomId); };
 async function leaveRoom(roomId){
   if(!roomRef) return;
   if(isHost) await roomRef.update({host:null});
   else await roomRef.update({guest:null});
-  checkRoomEmpty(roomId); 
-  resetGameUI(); 
-  currentRoomId=null;
+  checkRoomEmpty(roomId); resetGameUI(); currentRoomId=null;
 }
-
 function resetGameUI(){
   board=Array(9).fill(null); myMark=opMark='-'; myTurn=false; gameOver=false;
   roomRef=null; chatRef=null; rematchRef=null;
   document.getElementById('status').textContent='状態: 未接続';
   document.getElementById('turnInfo').textContent=''; document.getElementById('result').textContent='';
+  document.getElementById('chatLog').innerHTML='';
   Array.from(boardEl.children).forEach(c=>{ c.textContent=''; c.classList.remove('win','draw','disabled'); });
   document.getElementById('resetBtn').style.display='none'; document.getElementById('leaveBtn').style.display='none';
   document.getElementById('chatInput').disabled=true; document.getElementById('chatSend').disabled=true;
@@ -185,35 +175,47 @@ function updateRoomList(){
       div.onclick=()=>{ 
         const name = document.getElementById('playerName').value.trim();
         if(!name){ alert('名前を入力してください'); return; }
-        document.getElementById('roomId').value = rid; 
-        joinRoom(rid); 
+        document.getElementById('roomId').value=rid; joinRoom(rid); 
       };
       roomListEl.appendChild(div);
     });
   });
 }
+function checkRoomEmpty(roomId){ db.ref('rooms/'+roomId).get().then(snap=>{ const data=snap.val(); if(!data.host && !data.guest) db.ref('rooms/'+roomId).remove(); }); }
 updateRoomList();
-function checkRoomEmpty(roomId){
-  db.ref('rooms/'+roomId).get().then(snap=>{
-    const data=snap.val();
-    if(!data.host && !data.guest) db.ref('rooms/'+roomId).remove();
-  });
-}
 
-// DataChannel & チャット
+// データチャネル & チャット
 function setupDC(){
-  dc.onopen=()=>{
+  dc.onopen = () => {
     document.getElementById('status').textContent='接続済み';
-    if(isHost){ myMark='X'; opMark='O'; myTurn=true; send({type:'assign',mark:'O',yourTurn:false}); }
-    render(); 
-    document.getElementById('chatInput').disabled=false; 
+    if(isHost){
+      myMark='X'; opMark='O'; myTurn=true;
+      send({type:'assign', mark:'O', yourTurn:false});
+    }
+    render();
+    document.getElementById('chatInput').disabled=false;
     document.getElementById('chatSend').disabled=false;
   };
-  dc.onmessage=e=>{
-    const data=JSON.parse(e.data);
-    if(data.type==='move'){ board[data.i]=opMark; myTurn=true; render(); const r=winCheck(); if(r){gameOver=true; showResult(r.winner,r.line);} }
-    else if(data.type==='assign'){ myMark=data.mark; opMark=(data.mark==='X'?'O':'X'); myTurn=data.yourTurn||false; render(); }
-    else if(data.type==='gameover'){ gameOver=true; showResult(data.winner,data.line); }
+
+  dc.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if(data.type==='move'){
+      board[data.i]=opMark;
+      myTurn=true;
+      render();
+      const r = winCheck();
+      if(r){ gameOver=true; showResult(r.winner,r.line); }
+    }
+    else if(data.type==='assign'){
+      myMark=data.mark;
+      opMark = (data.mark==='X'?'O':'X');
+      myTurn=data.yourTurn;
+      render();
+    }
+    else if(data.type==='gameover'){
+      gameOver=true;
+      showResult(data.winner,data.line);
+    }
   };
 }
 function send(obj){ dc.send(JSON.stringify(obj)); }
@@ -240,15 +242,6 @@ async function createRoom(roomId){
   await roomRef.update({offer});
   document.getElementById('status').textContent='部屋作成。参加者を待っています...';
   setupChat(roomId); setupRematch(roomId); document.getElementById('leaveBtn').style.display='inline-block';
-  
-  // 相手退出監視
-  roomRef.on('value', snap=>{
-    const data = snap.val();
-    if(!data) return;
-    if(isHost && !data.guest && !gameOver){ alert('相手が退出しました'); resetGameUI(); document.getElementById('status').textContent='部屋作成。参加者を待っています...'; }
-    if(!isHost && !data.host && !gameOver){ alert('相手が退出しました'); resetGameUI(); document.getElementById('status').textContent='参加者を待っています...'; }
-  });
-  
   roomRef.on('value', async snap=>{
     const data=snap.val();
     if(!pc.currentRemoteDescription && data?.answer){ await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }
@@ -271,16 +264,12 @@ async function joinRoom(roomId){
   await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
   const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
   await roomRef.update({answer});
+
+  myMark='O'; opMark='X'; myTurn=false; // ゲストは後手
+  render();
+
   document.getElementById('status').textContent='接続中...';
   setupChat(roomId); setupRematch(roomId); document.getElementById('leaveBtn').style.display='inline-block';
-  
-  // 相手退出監視
-  roomRef.on('value', snap=>{
-    const data = snap.val();
-    if(!data) return;
-    if(!isHost && !data.host && !gameOver){ alert('相手が退出しました'); resetGameUI(); document.getElementById('status').textContent='参加者を待っています...'; }
-  });
-  
   roomRef.child('offerCandidates').on('child_added', async s=>{ try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch{} });
 }
 
