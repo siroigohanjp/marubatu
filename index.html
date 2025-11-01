@@ -1,487 +1,169 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>オンライン対戦 - 釣りローグじゃないけど三目並べ</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>オンライン三目並べ（Firebase自動シグナリング）</title>
 <style>
-  :root{ --bg:#0f1724; --panel:#071025; --accent:#06b6d4; --muted:#94a3b8; --win:#16a34a; }
-  body{ font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "メイリオ", sans-serif; margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#071022 0%, #0b2333 100%); color:#e6eef6; }
-  .wrap{ width:980px; max-width:96vw; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; box-shadow: 0 8px 30px rgba(2,6,23,0.7); padding:18px; display:grid; grid-template-columns: 360px 1fr; gap:16px; }
-  .panel{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:10px; padding:12px; border:1px solid rgba(255,255,255,0.03); }
-  h1{ margin:0 0 8px 0; font-size:18px; color:var(--accent); }
-  .controls{ display:flex; flex-direction:column; gap:8px; }
-  textarea,input{ width:100%; font-family:monospace; font-size:13px; }
-  button{ background:var(--accent); color:#02121a; border:none; padding:8px 10px; border-radius:8px; cursor:pointer; font-weight:600; }
-  .small{ padding:6px 8px; border-radius:8px; font-size:13px; }
-  .status{ font-size:13px; color:var(--muted); margin-bottom:6px; }
-  .grid{ display:grid; grid-template-columns: repeat(3,110px); gap:8px; justify-content:center; align-items:center; }
-  .cell{ width:110px; height:110px; background:rgba(255,255,255,0.02); display:flex; align-items:center; justify-content:center; font-size:48px; border-radius:10px; cursor:pointer; user-select:none; border:1px solid rgba(255,255,255,0.02); }
-  .cell.disabled{ cursor:not-allowed; opacity:0.6; }
-  .meta{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
-  .log{ height:160px; overflow:auto; background:rgba(0,0,0,0.15); padding:8px; border-radius:8px; font-size:13px; color:#e6eef6; }
-  .chat-input{ display:flex; gap:8px; margin-top:8px; }
-  .chat-input input{ flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; }
-  .winner{ color:var(--win); font-weight:700; }
-  footer{ margin-top:8px; color:var(--muted); font-size:12px; }
-  .row{ display:flex; gap:8px; align-items:center; }
-  .copybtn{ font-size:13px; padding:6px 8px; background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--accent); border-radius:8px; cursor:pointer; }
-  @media(max-width:880px){ .wrap{ grid-template-columns: 1fr; } .grid .cell{ width:90px; height:90px; font-size:40px; } }
+  body{font-family:sans-serif;background:#0f1724;color:#fff;text-align:center;padding:20px;}
+  #board{display:grid;grid-template-columns:repeat(3,100px);gap:5px;justify-content:center;margin-top:20px;}
+  .cell{width:100px;height:100px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:48px;cursor:pointer;border-radius:8px;}
+  .cell.disabled{opacity:0.6;cursor:not-allowed;}
+  input,button{font-size:16px;padding:8px;margin:4px;}
 </style>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<div class="wrap">
-  <!-- 左: 接続管理 / チャット -->
-  <div class="panel">
-    <h1>オンライン接続（WebRTC DataChannel）</h1>
-    <div class="status" id="connStatus">状態: 切断中</div>
-    <div class="controls">
-      <div class="row">
-        <button id="btnHost">① ホスト — Offer 作成</button>
-        <button id="btnGuest">② ゲスト — Offer 貼り付け→Answer作成</button>
-      </div>
-      <div style="margin-top:8px;">
-        <label>Local SDP（ここを相手に渡す / コピー）</label>
-        <textarea id="localSDP" rows="5" readonly></textarea>
-        <div style="display:flex; gap:8px; margin-top:6px;">
-          <button class="copybtn" id="copyLocal">コピー</button>
-          <button id="btnClearLocal" class="copybtn">クリア</button>
-        </div>
-      </div>
+<h1>オンライン三目並べ</h1>
 
-      <div style="margin-top:10px;">
-        <label>Remote SDP（相手から受け取ったものをここに貼り付け）</label>
-        <textarea id="remoteSDP" rows="5" placeholder="相手から受け取った Offer/Answer を貼り付け"></textarea>
-        <div style="display:flex; gap:8px; margin-top:6px;">
-          <button id="applyRemote">適用して接続</button>
-          <button id="btnAbort" class="copybtn">切断</button>
-        </div>
-      </div>
-
-      <hr style="margin:12px 0; border-color:rgba(255,255,255,0.03)" />
-
-      <div>
-        <label>対戦チャット</label>
-        <div class="log" id="chatLog"></div>
-        <div class="chat-input">
-          <input id="chatInput" placeholder="メッセージを入力して Enter" />
-          <button id="sendChat" class="small">送信</button>
-        </div>
-      </div>
-
-      <hr style="margin:12px 0; border-color:rgba(255,255,255,0.03)" />
-      <div style="display:flex; gap:8px;">
-        <button id="btnReset" class="small">ローカルリセット</button>
-        <button id="btnRematch" class="small">再戦（相手にリクエスト送信）</button>
-      </div>
-
-      <footer>接続方式：ブラウザ間で直接接続。Offer/Answerを手動で交換してください。</footer>
-    </div>
-  </div>
-
-  <!-- 右: ゲーム盤 -->
-  <div class="panel">
-    <div class="meta">
-      <h1>三目並べ（Tic-Tac-Toe）</h1>
-      <div>
-        あなた: <span id="myMark">-</span> ／ 相手: <span id="opMark">-</span>
-      </div>
-    </div>
-
-    <div class="grid" id="board"></div>
-
-    <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
-      <div>ターン: <span id="turnInfo">-</span></div>
-      <div>結果: <span id="result">-</span></div>
-    </div>
-  </div>
+<div>
+  <input id="roomId" placeholder="部屋コードを入力" />
+  <button id="createBtn">部屋を作る</button>
+  <button id="joinBtn">参加する</button>
 </div>
+<div id="status">状態: 未接続</div>
+
+<div id="board"></div>
+<div id="turnInfo"></div>
+<div id="result"></div>
 
 <script>
-/* ---------- シンプルなWebRTC DataChannelを使った対戦実装 ----------
-   使い方（ざっくり）
-   1) ホスト: 「① ホスト — Offer 作成」を押す。Local SDP を相手に渡す（コピー）
-   2) ゲスト: 相手の Offer を「Remote SDP」に貼り付けて「適用して接続」を押す → Guest は Answer を生成して LocalSDP に出るのでそれをホストに渡す
-   3) ホスト: 相手が返した Answer を「Remote SDP」に貼り付けて「適用して接続」を押す
-   4) DataChannel 経由でゲーム情報（手、チャット、再戦要求）を送受信
-------------------------------------------------------------------*/
+// ==== Firebase設定（★あなたの設定に置き換えてください） ====
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "XXXX",
+  appId: "XXXX"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-let pc = null;
-let dc = null;
-let isHost = false;
-let connected = false;
-
-// ゲーム状態
-let board = Array(9).fill(null);
+// ==== WebRTC + ゲームロジック ====
+let pc, dc;
+let myMark = '-', opMark = '-';
 let myTurn = false;
-let myMark = '-'; // 'X' or 'O'
-let opMark = '-';
-const WIN_LINES = [
-  [0,1,2],[3,4,5],[6,7,8],
-  [0,3,6],[1,4,7],[2,5,8],
-  [0,4,8],[2,4,6]
-];
+let board = Array(9).fill(null);
+let roomRef;
+let isHost = false;
 
-// UI refs
-const connStatus = document.getElementById('connStatus');
-const localSDP = document.getElementById('localSDP');
-const remoteSDP = document.getElementById('remoteSDP');
-const copyLocal = document.getElementById('copyLocal');
-const applyRemote = document.getElementById('applyRemote');
-const btnHost = document.getElementById('btnHost');
-const btnGuest = document.getElementById('btnGuest');
-const btnAbort = document.getElementById('btnAbort');
-const chatLog = document.getElementById('chatLog');
-const chatInput = document.getElementById('chatInput');
-const sendChat = document.getElementById('sendChat');
+// 盤面生成
 const boardEl = document.getElementById('board');
-const myMarkEl = document.getElementById('myMark');
-const opMarkEl = document.getElementById('opMark');
-const turnInfo = document.getElementById('turnInfo');
-const resultEl = document.getElementById('result');
-const btnReset = document.getElementById('btnReset');
-const btnRematch = document.getElementById('btnRematch');
-const btnClearLocal = document.getElementById('btnClearLocal');
-
-// 初期描画
-function makeBoard(){
-  boardEl.innerHTML = '';
-  for(let i=0;i<9;i++){
-    const c = document.createElement('div');
-    c.className = 'cell';
-    c.dataset.pos = i;
-    c.addEventListener('click', ()=>onCellClick(i));
-    boardEl.appendChild(c);
-  }
-  renderBoard();
-}
-makeBoard();
-
-function log(msg, kind='info'){
-  const d = document.createElement('div');
-  d.textContent = (new Date()).toLocaleTimeString() + ' — ' + msg;
-  if(kind==='system') d.style.color = '#94a3b8';
-  chatLog.appendChild(d);
-  chatLog.scrollTop = chatLog.scrollHeight;
+for(let i=0;i<9;i++){
+  const cell=document.createElement('div');
+  cell.className='cell';
+  cell.dataset.i=i;
+  cell.onclick=()=>makeMove(i);
+  boardEl.appendChild(cell);
 }
 
-function setStatus(s){
-  connStatus.textContent = '状態: ' + s;
-}
-
-function updateMarks(){
-  myMarkEl.textContent = myMark;
-  opMarkEl.textContent = opMark;
-}
-
-// 盤面レンダリング
-function renderBoard(){
-  for(let i=0;i<9;i++){
-    const cell = boardEl.children[i];
-    cell.textContent = board[i] || '';
-    cell.classList.toggle('disabled', !myTurn && !connected);
-  }
-  turnInfo.textContent = myTurn ? 'あなたの手番' : '相手の手番';
-}
-
-// クリックで打つ
-function onCellClick(index){
-  if(!connected){ log('接続されていません', 'system'); return; }
-  if(!myTurn){ log('今はあなたの手番ではありません', 'system'); return; }
-  if(board[index]){ log('そこは既に埋まっています', 'system'); return; }
-  makeMove(index, myMark);
-  sendData({ type:'move', pos:index, mark:myMark });
-  myTurn = false;
-  renderBoard();
-  checkGameEnd();
-}
-
-// 自分の手を盤面に反映
-function makeMove(pos, mark){
-  board[pos] = mark;
-  renderBoard();
-}
-
-// 勝敗判定
-function checkGameEnd(){
-  // 勝ち
-  for(const line of WIN_LINES){
-    const [a,b,c] = line;
-    if(board[a] && board[a]===board[b] && board[b]===board[c]){
-      const winner = board[a];
-      resultEl.innerHTML = (winner === myMark ? '<span class="winner">あなたの勝ち！</span>' : '<span class="winner">相手の勝ち</span>');
-      connected && sendData({ type:'gameover', winner });
-      disableBoard();
-      return true;
-    }
-  }
-  // 引き分け
-  if(board.every(Boolean)){
-    resultEl.textContent = '引き分け';
-    connected && sendData({ type:'gameover', winner: null });
-    disableBoard();
-    return true;
-  }
-  resultEl.textContent = '-';
-  return false;
-}
-
-function disableBoard(){
-  myTurn = false;
-  renderBoard();
-}
-
-// WebRTC 関係
-function createPeerConnection(){
-  pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: ["stun:stun.l.google.com:19302"] }
-    ]
+function render(){
+  board.forEach((v,i)=>{
+    const c=boardEl.children[i];
+    c.textContent=v||'';
+    c.classList.toggle('disabled',!myTurn||v);
   });
+  document.getElementById('turnInfo').textContent=myTurn?'あなたの手番':'相手の手番';
+}
+function winCheck(){
+  const lines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  for(const [a,b,c] of lines){
+    if(board[a]&&board[a]==board[b]&&board[a]==board[c]) return board[a];
+  }
+  if(board.every(Boolean)) return 'draw';
+  return null;
+}
+function makeMove(i){
+  if(!myTurn||board[i])return;
+  board[i]=myMark;
+  send({type:'move',i});
+  myTurn=false;render();
+  const w=winCheck();
+  if(w){
+    send({type:'gameover',winner:w});
+    showResult(w);
+  }
+}
+function showResult(w){
+  document.getElementById('result').textContent=(w==='draw')?'引き分け':(w===myMark?'あなたの勝ち!':'相手の勝ち');
+  myTurn=false;render();
+}
 
-  pc.onicecandidate = (e)=>{
-    // ICE gatherされるたびに SDP を更新するのでコピーして相手に渡す
-    updateLocalSDP();
-  };
+// ==== Firebaseシグナリング ====
+async function createRoom(roomId){
+  isHost=true;
+  roomRef=db.ref('rooms/'+roomId);
+  roomRef.remove();
+  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  dc=pc.createDataChannel('chat');
+  setupDC();
+  pc.onicecandidate=e=>{ if(e.candidate){ roomRef.child('offerCandidates').push(e.candidate.toJSON()); }};
+  const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+  await roomRef.set({offer:offer});
+  document.getElementById('status').textContent='部屋作成完了。相手が参加するのを待っています…';
 
-  pc.onconnectionstatechange = ()=>{
-    setStatus(pc.connectionState);
-    if(pc.connectionState === 'connected'){
-      connected = true;
-      log('ピア接続確立', 'system');
-    } else if(pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed'){
-      connected = false;
-      log('ピア接続切断', 'system');
+  roomRef.on('value', async snap=>{
+    const data=snap.val();
+    if(!pc.currentRemoteDescription && data?.answer){
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      document.getElementById('status').textContent='接続中...';
     }
+  });
+  roomRef.child('answerCandidates').on('child_added',async s=>{
+    try{await pc.addIceCandidate(new RTCIceCandidate(s.val()));}catch{}
+  });
+}
+
+async function joinRoom(roomId){
+  isHost=false;
+  roomRef=db.ref('rooms/'+roomId);
+  const snap=await roomRef.get();
+  if(!snap.exists()){alert('部屋が見つかりません');return;}
+  const offer=snap.val().offer;
+  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc.ondatachannel=e=>{dc=e.channel;setupDC();};
+  pc.onicecandidate=e=>{ if(e.candidate){ roomRef.child('answerCandidates').push(e.candidate.toJSON()); }};
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
+  await roomRef.update({answer:answer});
+  document.getElementById('status').textContent='接続中...';
+  roomRef.child('offerCandidates').on('child_added',async s=>{
+    try{await pc.addIceCandidate(new RTCIceCandidate(s.val()));}catch{}
+  });
+}
+
+// ==== DataChannel ====
+function setupDC(){
+  dc.onopen=()=>{
+    document.getElementById('status').textContent='接続済み';
+    if(isHost){myMark='X';opMark='O';myTurn=true;send({type:'assign',mark:'O'});}
+    else{myMark='O';opMark='X';myTurn=false;}
+    render();
   };
-
-  return pc;
-}
-
-function setupDataChannelEvents(){
-  if(!dc) return;
-  dc.onopen = ()=> {
-    log('DataChannel open', 'system');
-    connected = true;
-    setStatus('接続済み');
-    // 接続成立時にマークと先手を決める（ホストが X & 先手）
-    if(isHost){
-      myMark = 'X'; opMark = 'O'; myTurn = true;
-      sendData({ type:'assign', mark:'O', first:false });
-    } else {
-      myMark = 'O'; opMark = 'X'; myTurn = false;
-    }
-    updateMarks(); renderBoard();
-  };
-  dc.onclose = ()=> {
-    connected = false;
-    setStatus('切断');
-    log('DataChannel closed', 'system');
-  };
-  dc.onmessage = (ev)=>{
-    try{
-      const data = JSON.parse(ev.data);
-      handleRemoteMessage(data);
-    }catch(e){
-      log('受信: ' + ev.data);
-    }
+  dc.onmessage=e=>{
+    const data=JSON.parse(e.data);
+    if(data.type==='move'){board[data.i]=opMark;myTurn=true;render();}
+    else if(data.type==='assign'){opMark=data.mark;myMark=(data.mark==='X'?'O':'X');render();}
+    else if(data.type==='gameover'){showResult(data.winner);}
   };
 }
+function send(obj){ dc.send(JSON.stringify(obj)); }
 
-function handleRemoteMessage(data){
-  if(!data || !data.type) return;
-  switch(data.type){
-    case 'chat':
-      log('相手: ' + data.message);
-      break;
-    case 'move':
-      // 相手の手
-      makeMove(data.pos, data.mark);
-      myTurn = true; renderBoard();
-      checkGameEnd();
-      break;
-    case 'assign':
-      // もしホストから来たら相手のマークや先手情報を受信できる
-      opMark = data.mark;
-      myMark = (data.mark === 'X') ? 'O' : 'X';
-      myTurn = !!data.first;
-      updateMarks(); renderBoard();
-      break;
-    case 'gameover':
-      if(data.winner === null){
-        resultEl.textContent = '引き分け';
-      } else {
-        resultEl.innerHTML = (data.winner === myMark ? '<span class="winner">あなたの勝ち！</span>' : '<span class="winner">相手の勝ち</span>');
-      }
-      disableBoard();
-      break;
-    case 'rematch':
-      // 相手が再戦リクエストをしてきた
-      if(confirm('相手が再戦を求めています。受けますか？')){
-        startNewGame(true);
-        sendData({ type:'rematch-accept' });
-      } else {
-        sendData({ type:'rematch-decline' });
-      }
-      break;
-    case 'rematch-accept':
-      alert('相手が再戦を承諾しました。新しいゲームを開始します。');
-      startNewGame(true);
-      break;
-    case 'rematch-decline':
-      alert('相手が再戦を拒否しました。');
-      break;
-    default:
-      console.warn('Unknown message', data);
-  }
-}
-
-// DataChannel 送信
-function sendData(obj){
-  if(dc && dc.readyState === 'open'){
-    dc.send(JSON.stringify(obj));
-  } else {
-    log('送信できません: チャネル未接続', 'system');
-  }
-}
-
-// ボタン: ホスト（Offer を作る）
-btnHost.addEventListener('click', async ()=>{
-  isHost = true;
-  pc && pc.close();
-  pc = createPeerConnection();
-
-  // DataChannel を作る（ホストが作成）
-  dc = pc.createDataChannel('game');
-  setupDataChannelEvents();
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  // ICE 集め終わるまで待たない（より早くSDPを渡せる） — but we update localSDP onicecandidate
-  updateLocalSDP();
-  setStatus('Offer 作成済み、SDP を相手に渡してください');
-  log('Offer を作成しました。Local SDP を相手に渡してください。', 'system');
-});
-
-// ボタン: ゲスト（オファーを受け取ってAnswerを作る）
-// ユーザーは相手から受け取った Offer を remoteSDP に貼り付けてから「適用して接続」を押す
-btnGuest.addEventListener('click', ()=>{
-  isHost = false;
-  pc && pc.close();
-  pc = createPeerConnection();
-
-  // 受信用の datachannel ハンドラ（ゲストは ondatachannel を受け取る）
-  pc.ondatachannel = (ev)=>{
-    dc = ev.channel;
-    setupDataChannelEvents();
-  };
-  setStatus('ゲスト用 RTCPeerConnection を作成しました。相手の Offer を貼り付けて「適用して接続」を押してください。');
-  log('ゲスト用 PC を準備しました。', 'system');
-});
-
-// リモートSDP を適用して接続（Offer/Answer の貼り付け適用）
-applyRemote.addEventListener('click', async ()=>{
-  if(!pc){
-    alert('先に「ホスト」か「ゲスト」を選んでください。');
-    return;
-  }
-  const sdpText = remoteSDP.value.trim();
-  if(!sdpText){ alert('Remote SDP を貼り付けてください'); return; }
-
-  try{
-    const obj = JSON.parse(sdpText);
-    if(obj.type === 'offer'){
-      // 受け取ったのが Offer（つまりこの側はゲスト）
-      await pc.setRemoteDescription(obj);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      updateLocalSDP();
-      setStatus('Answer 作成済み — Local SDP をホストに返送してください');
-      log('Answer を作成しました。Local SDP をホストに返してください。', 'system');
-    } else if(obj.type === 'answer'){
-      // 受け取ったのが Answer（ホスト側がこれを受け取る）
-      await pc.setRemoteDescription(obj);
-      setStatus('接続交渉中（Answer 受理）');
-      log('Answer を受け取りました。接続を待っています...', 'system');
-    } else {
-      alert('不明なSDPタイプ: ' + obj.type);
-    }
-  }catch(e){
-    alert('SDP のパースに失敗しました。正しい JSON を貼り付けてください。\n\nエラー: '+e.message);
-  }
-});
-
-btnAbort.addEventListener('click', ()=>{
-  if(pc) pc.close();
-  pc = null; dc = null; connected = false;
-  setStatus('切断');
-  localSDP.value = '';
-  remoteSDP.value = '';
-  log('接続を切断しました', 'system');
-});
-
-copyLocal.addEventListener('click', ()=>{
-  localSDP.select();
-  document.execCommand('copy');
-  log('Local SDP をコピーしました（クリップボード）', 'system');
-});
-
-btnClearLocal.addEventListener('click', ()=>{
-  localSDP.value = '';
-});
-
-// Update localSDP textarea with current localDescription JSON
-function updateLocalSDP(){
-  if(!pc || !pc.localDescription) return;
-  localSDP.value = JSON.stringify(pc.localDescription);
-}
-
-// チャット送信
-sendChat.addEventListener('click', ()=>{ sendChatPressed(); });
-chatInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') sendChatPressed(); });
-
-function sendChatPressed(){
-  const msg = chatInput.value.trim();
-  if(!msg) return;
-  log('あなた: ' + msg);
-  sendData({ type:'chat', message:msg });
-  chatInput.value = '';
-}
-
-// 再戦ボタン
-btnRematch.addEventListener('click', ()=>{
-  if(!connected){ alert('相手と接続してください'); return; }
-  sendData({ type:'rematch' });
-  log('再戦リクエストを送信しました', 'system');
-});
-
-// ローカルリセット（自分の画面のみ）
-btnReset.addEventListener('click', ()=>{
-  startNewGame(false);
-});
-
-// リモートメッセージで startNewGame(true) 呼ばれる場合あり
-function startNewGame(isRemoteInitiated){
-  board = Array(9).fill(null);
-  resultEl.textContent = '-';
-  // 先手はホスト（X）にするルール。ホストが X で先に打てるようにセット。
-  if(isHost){
-    myMark = 'X'; opMark = 'O'; myTurn = true;
-  } else {
-    myMark = 'O'; opMark = 'X'; myTurn = false;
-  }
-  updateMarks();
-  renderBoard();
-  if(!isRemoteInitiated) log('新しいゲームを開始しました（ローカル）', 'system');
-}
-
-// 初期状態
-setStatus('準備完了');
-log('ページを読み込みました。ホスト/ゲストのどちらかを選択してください。', 'system');
-
-// ページ離脱時にピアを閉じる
-window.addEventListener('beforeunload', ()=>{ if(pc) pc.close(); });
-
+// ==== UIボタン ====
+document.getElementById('createBtn').onclick=()=>{
+  const id=document.getElementById('roomId').value.trim();
+  if(!id){alert('部屋コードを入力');return;}
+  createRoom(id);
+};
+document.getElementById('joinBtn').onclick=()=>{
+  const id=document.getElementById('roomId').value.trim();
+  if(!id){alert('部屋コードを入力');return;}
+  joinRoom(id);
+};
 </script>
 </body>
 </html>
