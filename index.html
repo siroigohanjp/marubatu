@@ -31,7 +31,7 @@ input, button { font-size: 16px; padding: 6px; margin: 4px; }
 </head>
 <body>
 
-<h1>オンライン三目並べｖ0.0.14</h1>
+<h1>オンライン三目並べｖ0.0.15</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -145,19 +145,35 @@ function startRematch(){
 document.getElementById('leaveBtn').onclick=()=>{ if(currentRoomId) leaveRoom(currentRoomId); };
 async function leaveRoom(roomId){
   if(!roomRef) return;
-  if(isHost) await roomRef.update({host:null});
-  else await roomRef.update({guest:null});
-  checkRoomEmpty(roomId); resetGameUI(); currentRoomId=null;
+
+  // チャット履歴削除
+  if(chatRef) await chatRef.remove();
+
+  if(isHost){
+    // ホストが退出 → 部屋ごと削除
+    await roomRef.remove();
+  } else {
+    // ゲストが退出 → guest情報だけ削除
+    await roomRef.update({guest:null});
+  }
+
+  resetGameUI();
+  currentRoomId=null;
 }
+
+// UIリセット
 function resetGameUI(){
   board=Array(9).fill(null); myMark=opMark='-'; myTurn=false; gameOver=false;
   roomRef=null; chatRef=null; rematchRef=null;
   document.getElementById('status').textContent='状態: 未接続';
-  document.getElementById('turnInfo').textContent=''; document.getElementById('result').textContent='';
+  document.getElementById('turnInfo').textContent=''; 
+  document.getElementById('result').textContent='';
   document.getElementById('chatLog').innerHTML='';
   Array.from(boardEl.children).forEach(c=>{ c.textContent=''; c.classList.remove('win','draw','disabled'); });
-  document.getElementById('resetBtn').style.display='none'; document.getElementById('leaveBtn').style.display='none';
-  document.getElementById('chatInput').disabled=true; document.getElementById('chatSend').disabled=true;
+  document.getElementById('resetBtn').style.display='none'; 
+  document.getElementById('leaveBtn').style.display='none';
+  document.getElementById('chatInput').disabled=true; 
+  document.getElementById('chatSend').disabled=true;
 }
 
 // 部屋一覧
