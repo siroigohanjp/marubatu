@@ -11,12 +11,15 @@
     font-size: 48px; cursor: pointer; border-radius: 8px; transition: background 0.3s, box-shadow 0.3s; }
   .cell.disabled { opacity: 0.5; cursor: not-allowed; }
   .win { background: #22c55e !important; box-shadow: 0 0 20px #22c55e; animation: flash 0.8s ease-in-out infinite alternate; }
-  @keyframes flash { from { transform: scale(1); } to { transform: scale(1.05); } }
   .draw { opacity: 0.7; }
   input, button { font-size: 16px; padding: 6px; margin: 4px; }
-  #turnInfo { font-size: 22px; margin-top: 15px; font-weight: bold; }
+  #turnInfo { font-size: 22px; margin-top: 15px; font-weight: bold; transition: color 0.4s, text-shadow 0.4s; }
   #turnInfo.active { color: #4ade80; text-shadow: 0 0 10px #4ade80; animation: pulse 1s infinite alternate; }
+  .winner { color: #22c55e !important; text-shadow: 0 0 15px #22c55e, 0 0 30px #22c55e; }
+  .loser { color: #f87171 !important; text-shadow: 0 0 15px #f87171; }
+  .drawText { color: #94a3b8 !important; }
   @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
+  @keyframes flash { from { transform: scale(1); } to { transform: scale(1.05); } }
   #chatArea { width: 300px; margin: 20px auto; background: #1e293b; padding: 10px; border-radius: 8px; text-align: left; }
   #chatLog { height: 150px; overflow-y: auto; background: #0f1724; padding: 6px; border-radius: 4px; }
   .chatMsg { margin: 2px 0; }
@@ -27,7 +30,7 @@
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.4</h1>
+<h1>オンライン三目並べｖ0.0.5</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -72,7 +75,7 @@ let myMark = '-', opMark = '-';
 let myTurn = false;
 let board = Array(9).fill(null);
 let roomRef, chatRef, rematchRef;
-let isHost = false, gameOver = false, myReady = false;
+let isHost = false, gameOver = false;
 let playerName = '';
 let chatListener = null;
 
@@ -93,8 +96,10 @@ function render() {
     c.classList.toggle('disabled', !myTurn || v || gameOver);
   });
   const turnInfo = document.getElementById('turnInfo');
-  if (gameOver) turnInfo.textContent = 'ゲーム終了';
-  else {
+  if (gameOver) {
+    turnInfo.textContent = 'ゲーム終了';
+    turnInfo.classList.remove('active');
+  } else {
     turnInfo.textContent = myTurn ? 'あなたの手番！' : '相手の手番…';
     turnInfo.classList.toggle('active', myTurn);
   }
@@ -128,14 +133,23 @@ function makeMove(i) {
 // ==== 結果表示 ====
 function showResult(winner, line=[]) {
   const resultEl = document.getElementById('result');
+  const turnInfo = document.getElementById('turnInfo');
   const cells = boardEl.children;
   Array.from(cells).forEach(c=>c.classList.remove('win','draw'));
 
+  // デフォルトスタイルリセット
+  turnInfo.classList.remove('winner','loser','drawText');
+
   if (winner === 'draw') {
     resultEl.textContent = '引き分け！';
+    turnInfo.textContent = '引き分け！';
+    turnInfo.classList.add('drawText');
     Array.from(cells).forEach(c=>c.classList.add('draw'));
   } else {
-    resultEl.textContent = (winner === myMark) ? 'あなたの勝ち！🎉' : 'あなたの負け…😢';
+    const isWin = (winner === myMark);
+    resultEl.textContent = isWin ? 'あなたの勝ち！🎉' : 'あなたの負け…😢';
+    turnInfo.textContent = isWin ? '勝利！🎉' : '敗北…';
+    turnInfo.classList.add(isWin ? 'winner' : 'loser');
     if (line) line.forEach(i => cells[i].classList.add('win'));
   }
   document.getElementById('resetBtn').style.display='inline-block';
@@ -156,7 +170,6 @@ function setupRematch(roomId) {
 }
 
 document.getElementById('resetBtn').onclick = ()=>{
-  myReady=true;
   document.getElementById('resetBtn').disabled=true;
   document.getElementById('resetBtn').textContent='相手の準備を待っています...';
   rematchRef.update(isHost?{hostReady:true}:{guestReady:true});
@@ -167,6 +180,7 @@ function startRematch(){
   gameOver=false;
   myTurn=isHost;
   document.getElementById('result').textContent='';
+  document.getElementById('turnInfo').classList.remove('winner','loser','drawText');
   document.getElementById('resetBtn').style.display='none';
   document.getElementById('resetBtn').disabled=false;
   document.getElementById('resetBtn').textContent='もう一度遊ぶ';
@@ -256,7 +270,6 @@ function setupChat(roomId){
   const chatInput=document.getElementById('chatInput');
   chatLog.innerHTML='';
   chatRef=db.ref(`rooms/${roomId}/chat`);
-
   chatRef.off();
   chatSend.onclick=async()=>{
     const msg=chatInput.value.trim();
@@ -264,7 +277,6 @@ function setupChat(roomId){
     await chatRef.push({name:playerName,msg,time:Date.now()});
     chatInput.value='';
   };
-
   chatRef.on('child_added',snap=>{
     const {name,msg}=snap.val();
     const div=document.createElement('div');
