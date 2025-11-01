@@ -30,7 +30,7 @@
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.5</h1>
+<h1>オンライン三目並べｖ0.0.6</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -175,17 +175,29 @@ document.getElementById('resetBtn').onclick = ()=>{
   rematchRef.update(isHost?{hostReady:true}:{guestReady:true});
 };
 
-function startRematch(){
-  board=Array(9).fill(null);
-  gameOver=false;
-  myTurn=isHost;
-  document.getElementById('result').textContent='';
-  document.getElementById('turnInfo').classList.remove('winner','loser','drawText');
-  document.getElementById('resetBtn').style.display='none';
-  document.getElementById('resetBtn').disabled=false;
-  document.getElementById('resetBtn').textContent='もう一度遊ぶ';
+function startRematch() {
+  board = Array(9).fill(null);
+  gameOver = false;
+  myTurn = isHost;
+
+  // --- 勝利ラインと見た目をリセット ---
+  Array.from(boardEl.children).forEach(c => {
+    c.textContent = '';
+    c.classList.remove('win', 'draw', 'disabled');
+  });
+
+  document.getElementById('result').textContent = '';
+  const turnInfo = document.getElementById('turnInfo');
+  turnInfo.classList.remove('winner', 'loser', 'drawText');
+  turnInfo.textContent = myTurn ? 'あなたの手番！' : '相手の手番…';
+  turnInfo.classList.toggle('active', myTurn);
+
+  document.getElementById('resetBtn').style.display = 'none';
+  document.getElementById('resetBtn').disabled = false;
+  document.getElementById('resetBtn').textContent = 'もう一度遊ぶ';
   render();
 }
+
 
 // ==== Firebaseシグナリング ====
 async function createRoom(roomId){
