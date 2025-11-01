@@ -32,7 +32,7 @@
 </head>
 <body>
 
-<h1>オンライン三目並べｖ0.0.11</h1>
+<h1>オンライン三目並べｖ0.0.12</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -242,8 +242,34 @@ async function joinRoom(roomId){
 }
 
 // UIボタン
-document.getElementById('createBtn').onclick=()=>{ const id=document.getElementById('roomId').value.trim(); if(!id){alert('部屋コードを入力してください'); return;} createRoom(id); };
-document.getElementById('joinBtn').onclick=()=>{ const id=document.getElementById('roomId').value.trim(); if(!id){alert('部屋コードを入力してください'); return;} joinRoom(id); };
+document.getElementById('createBtn').onclick = () => {
+    const id = document.getElementById('roomId').value.trim();
+    const name = document.getElementById('playerName').value.trim();
+    if (!name) { 
+        alert('名前を入力してください'); 
+        return; 
+    }
+    if (!id) {
+        alert('部屋コードを入力してください');
+        return;
+    }
+    createRoom(id);
+};
+
+document.getElementById('joinBtn').onclick = () => {
+    const id = document.getElementById('roomId').value.trim();
+    const name = document.getElementById('playerName').value.trim();
+    if (!name) { 
+        alert('名前を入力してください'); 
+        return; 
+    }
+    if (!id) {
+        alert('部屋コードを入力してください');
+        return;
+    }
+    joinRoom(id);
+};
+
 
 </script>
 </body>
