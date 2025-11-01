@@ -23,7 +23,7 @@
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.1</h1>
+<h1>オンライン三目並べｖ0.0.2</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -72,6 +72,8 @@ let chatRef;
 let isHost = false;
 let gameOver = false;
 let playerName = '';
+let rematchRef;
+let myReady = false;
 
 // ==== 盤面生成 ====
 const boardEl = document.getElementById('board');
@@ -131,6 +133,38 @@ function showResult(winner) {
   render();
 }
 
+// ==== 再戦処理 ====
+function setupRematch(roomId) {
+  rematchRef = db.ref('rooms/' + roomId + '/rematch');
+  rematchRef.remove();
+
+  rematchRef.on('value', snap => {
+    const data = snap.val() || {};
+    if (data.hostReady && data.guestReady) {
+      startRematch();
+      rematchRef.remove(); // 一度リセット
+    }
+  });
+}
+
+document.getElementById('resetBtn').onclick = () => {
+  myReady = true;
+  document.getElementById('resetBtn').disabled = true;
+  document.getElementById('resetBtn').textContent = '相手の準備を待っています...';
+  rematchRef.update(isHost ? { hostReady: true } : { guestReady: true });
+};
+
+function startRematch() {
+  board = Array(9).fill(null);
+  gameOver = false;
+  myTurn = isHost; // ホストが先手
+  document.getElementById('result').textContent = '';
+  document.getElementById('resetBtn').style.display = 'none';
+  document.getElementById('resetBtn').disabled = false;
+  document.getElementById('resetBtn').textContent = 'もう一度遊ぶ';
+  render();
+}
+
 // ==== Firebaseシグナリング ====
 async function createRoom(roomId) {
   playerName = document.getElementById('playerName').value.trim() || 'プレイヤー';
@@ -146,6 +180,7 @@ async function createRoom(roomId) {
   document.getElementById('status').textContent = '部屋を作成しました。参加者を待っています...';
   chatRef = db.ref('rooms/' + roomId + '/chat');
   setupChat();
+  setupRematch(roomId);
 
   roomRef.on('value', async snap => {
     const data = snap.val();
@@ -174,6 +209,7 @@ async function joinRoom(roomId) {
   document.getElementById('status').textContent = '接続中...';
   chatRef = db.ref('rooms/' + roomId + '/chat');
   setupChat();
+  setupRematch(roomId);
 
   roomRef.child('offerCandidates').on('child_added', async s => {
     try { await pc.addIceCandidate(new RTCIceCandidate(s.val())); } catch {}
@@ -254,7 +290,6 @@ document.getElementById('joinBtn').onclick = () => {
   if (!id) { alert('部屋コードを入力してください'); return; }
   joinRoom(id);
 };
-document.getElementById('resetBtn').onclick = () => { location.reload(); };
 </script>
 </body>
 </html>
