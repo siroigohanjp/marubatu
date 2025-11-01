@@ -26,11 +26,13 @@
   #roomList { margin: 10px auto; width: 300px; text-align: left; background: #1e293b; padding: 10px; border-radius: 8px; }
   .roomItem { padding: 4px; margin: 2px 0; background: #0f1724; border-radius: 4px; cursor: pointer; display:flex; justify-content:space-between; }
 </style>
+
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.10</h1>
+
+<h1>オンライン三目並べｖ0.0.11</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -43,7 +45,6 @@
 </div>
 
 <div id="status">状態: 未接続</div>
-
 <div id="roomList"></div>
 
 <div id="board"></div>
@@ -59,6 +60,7 @@
 </div>
 
 <script>
+// Firebase 設定
   const firebaseConfig = {
     apiKey: "AIzaSyAI3pNSCaU2teHdqa1Rh1eLoQu1VZYtoh4",
     authDomain: "webrtc-gamesg.firebaseapp.com",
@@ -71,32 +73,24 @@
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// 変数
 let pc, dc;
-let myMark = '-', opMark = '-';
-let myTurn = false;
-let board = Array(9).fill(null);
+let myMark='-', opMark='-';
+let myTurn=false;
+let board=Array(9).fill(null);
 let roomRef, chatRef, rematchRef;
-let isHost = false, gameOver = false;
-let playerName = '';
-let currentRoomId = null;
+let isHost=false, gameOver=false;
+let playerName='';
+let currentRoomId=null;
 
 // 盤面生成
-const boardEl = document.getElementById('board');
-for(let i=0;i<9;i++){
-  const cell = document.createElement('div');
-  cell.className='cell';
-  cell.onclick=()=>makeMove(i);
-  boardEl.appendChild(cell);
-}
+const boardEl=document.getElementById('board');
+for(let i=0;i<9;i++){ const cell=document.createElement('div'); cell.className='cell'; cell.onclick=()=>makeMove(i); boardEl.appendChild(cell); }
 
 // 表示
 function render(){
-  board.forEach((v,i)=>{
-    const c = boardEl.children[i];
-    c.textContent = v||'';
-    c.classList.toggle('disabled',!myTurn||v||gameOver);
-  });
-  const turnInfo = document.getElementById('turnInfo');
+  board.forEach((v,i)=>{ const c=boardEl.children[i]; c.textContent=v||''; c.classList.toggle('disabled',!myTurn||v||gameOver); });
+  const turnInfo=document.getElementById('turnInfo');
   if(gameOver){ turnInfo.textContent='ゲーム終了'; turnInfo.classList.remove('active'); }
   else { turnInfo.textContent=myTurn?'あなたの手番！':'相手の手番…'; turnInfo.classList.toggle('active',myTurn); }
 }
@@ -105,8 +99,7 @@ function render(){
 function winCheck(){
   const lines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   for(const [a,b,c] of lines){ if(board[a]&&board[a]==board[b]&&board[a]==board[c]) return {winner:board[a], line:[a,b,c]}; }
-  if(board.every(Boolean)) return {winner:'draw'};
-  return null;
+  if(board.every(Boolean)) return {winner:'draw'}; return null;
 }
 
 // 一手
@@ -115,8 +108,8 @@ function makeMove(i){
   board[i]=myMark;
   send({type:'move',i});
   myTurn=false; render();
-  const result=winCheck();
-  if(result){ gameOver=true; send({type:'gameover',winner:result.winner,line:result.line}); showResult(result.winner,result.line); }
+  const r=winCheck();
+  if(r){ gameOver=true; send({type:'gameover',winner:r.winner,line:r.line}); showResult(r.winner,r.line); }
 }
 
 // 結果表示
@@ -133,63 +126,43 @@ function showResult(winner,line=[]){
 
 // 再戦
 function setupRematch(roomId){
-  rematchRef = db.ref('rooms/'+roomId+'/rematch');
-  rematchRef.remove();
-  rematchRef.on('value',snap=>{
-    const data=snap.val()||{};
-    if(data.hostReady && data.guestReady){ startRematch(); rematchRef.remove(); }
-  });
+  rematchRef=db.ref('rooms/'+roomId+'/rematch'); rematchRef.remove();
+  rematchRef.on('value',snap=>{ const data=snap.val()||{}; if(data.hostReady && data.guestReady){ startRematch(); rematchRef.remove(); } });
 }
-
-document.getElementById('resetBtn').onclick=()=>{
-  document.getElementById('resetBtn').disabled=true;
-  document.getElementById('resetBtn').textContent='相手の準備を待っています...';
-  rematchRef.update(isHost?{hostReady:true}:{guestReady:true});
-};
-
-function startRematch(){
-  board = Array(9).fill(null); gameOver=false; myTurn=isHost;
-  Array.from(boardEl.children).forEach(c=>{c.textContent=''; c.classList.remove('win','draw','disabled');});
-  document.getElementById('result').textContent='';
-  const turnInfo=document.getElementById('turnInfo');
-  turnInfo.classList.remove('winner','loser','drawText');
-  turnInfo.textContent=myTurn?'あなたの手番！':'相手の手番…';
-  turnInfo.classList.toggle('active',myTurn);
-  document.getElementById('resetBtn').style.display='none';
-  document.getElementById('resetBtn').disabled=false;
-  document.getElementById('resetBtn').textContent='もう一度遊ぶ';
-  render();
-}
+document.getElementById('resetBtn').onclick=()=>{ document.getElementById('resetBtn').disabled=true; document.getElementById('resetBtn').textContent='相手の準備を待っています...'; rematchRef.update(isHost?{hostReady:true}:{guestReady:true}); };
+function startRematch(){ board=Array(9).fill(null); gameOver=false; myTurn=isHost; Array.from(boardEl.children).forEach(c=>{c.textContent=''; c.classList.remove('win','draw','disabled');}); document.getElementById('result').textContent=''; const turnInfo=document.getElementById('turnInfo'); turnInfo.classList.remove('winner','loser','drawText'); turnInfo.textContent=myTurn?'あなたの手番！':'相手の手番…'; turnInfo.classList.toggle('active',myTurn); document.getElementById('resetBtn').style.display='none'; document.getElementById('resetBtn').disabled=false; document.getElementById('resetBtn').textContent='もう一度遊ぶ'; render(); }
 
 // 退出
-document.getElementById('leaveBtn').onclick=()=>{
-  if(!currentRoomId) return;
-  leaveRoom(currentRoomId);
-};
-
+document.getElementById('leaveBtn').onclick=()=>{ if(currentRoomId) leaveRoom(currentRoomId); };
 async function leaveRoom(roomId){
   if(!roomRef) return;
   if(isHost) await roomRef.update({host:null});
   else await roomRef.update({guest:null});
-  checkRoomEmpty(roomId);
-  resetGameUI();
-  currentRoomId=null;
+  checkRoomEmpty(roomId); resetGameUI(); currentRoomId=null;
+}
+function resetGameUI(){
+  board=Array(9).fill(null); myMark=opMark='-'; myTurn=false; gameOver=false;
+  roomRef=null; chatRef=null; rematchRef=null;
+  document.getElementById('status').textContent='状態: 未接続';
+  document.getElementById('turnInfo').textContent=''; document.getElementById('result').textContent='';
+  Array.from(boardEl.children).forEach(c=>{ c.textContent=''; c.classList.remove('win','draw','disabled'); });
+  document.getElementById('resetBtn').style.display='none'; document.getElementById('leaveBtn').style.display='none';
+  document.getElementById('chatInput').disabled=true; document.getElementById('chatSend').disabled=true;
 }
 
 // 部屋一覧
 const roomListEl=document.getElementById('roomList');
 function updateRoomList(){
   db.ref('rooms').on('value',snap=>{
-    const data = snap.val()||{};
+    const data=snap.val()||{};
     roomListEl.innerHTML='';
     Object.keys(data).forEach(rid=>{
       const room = data[rid];
-      // 誰もいない部屋は削除
-      if(!room.host && !room.guest) { db.ref('rooms/'+rid).remove(); return; }
-      const div = document.createElement('div');
+      if(!room.host && !room.guest){ db.ref('rooms/'+rid).remove(); return; }
+      const div=document.createElement('div');
       div.className='roomItem';
       div.innerHTML=`<span>${rid} (ホスト: ${room.host||'-'})</span> <span>${room.host && room.guest?'満':'参加'}</span>`;
-      div.onclick=()=>{document.getElementById('roomId').value=rid; joinRoom(rid);};
+      div.onclick=()=>{ document.getElementById('roomId').value=rid; joinRoom(rid); };
       roomListEl.appendChild(div);
     });
   });
@@ -198,14 +171,80 @@ function updateRoomList(){
 // 空の部屋は削除
 function checkRoomEmpty(roomId){
   db.ref('rooms/'+roomId).get().then(snap=>{
-    const data = snap.val();
+    const data=snap.val();
     if(!data.host && !data.guest) db.ref('rooms/'+roomId).remove();
   });
 }
 
-// Firebase DataChannelやチャット、createRoom/joinRoomのコードは以前のものを流用
-// ここでは部屋一覧更新と退出ボタン表示のみ追加
 updateRoomList();
+
+// DataChannel & チャット
+function setupDC(){
+  dc.onopen=()=>{
+    document.getElementById('status').textContent='接続済み';
+    if(isHost){ myMark='X'; opMark='O'; myTurn=true; send({type:'assign',mark:'O',yourTurn:false}); }
+    render(); document.getElementById('chatInput').disabled=false; document.getElementById('chatSend').disabled=false;
+  };
+  dc.onmessage=e=>{
+    const data=JSON.parse(e.data);
+    if(data.type==='move'){ board[data.i]=opMark; myTurn=true; render(); const r=winCheck(); if(r){gameOver=true; showResult(r.winner,r.line);} }
+    else if(data.type==='assign'){ myMark=data.mark; opMark=(data.mark==='X'?'O':'X'); myTurn=data.yourTurn||false; render(); }
+    else if(data.type==='gameover'){ gameOver=true; showResult(data.winner,data.line); }
+  };
+}
+function send(obj){ dc.send(JSON.stringify(obj)); }
+function setupChat(roomId){
+  const chatLog=document.getElementById('chatLog'); const chatSend=document.getElementById('chatSend'); const chatInput=document.getElementById('chatInput');
+  chatLog.innerHTML=''; chatRef=db.ref(`rooms/${roomId}/chat`); chatRef.off();
+  chatSend.onclick=async()=>{ const msg=chatInput.value.trim(); if(!msg||!chatRef) return; await chatRef.push({name:playerName,msg,time:Date.now()}); chatInput.value=''; };
+  chatRef.on('child_added',snap=>{ const {name,msg}=snap.val(); const div=document.createElement('div'); div.className='chatMsg'; div.textContent=`${name}: ${msg}`; chatLog.appendChild(div); chatLog.scrollTop=chatLog.scrollHeight; });
+}
+
+// create/join
+async function createRoom(roomId){
+  playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
+  roomRef=db.ref('rooms/'+roomId);
+  const snap = await roomRef.get();
+  if(snap.exists()){ alert('この部屋IDは既に存在します。'); return; }
+  isHost=true; currentRoomId=roomId;
+  await roomRef.set({host:playerName});
+  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  dc=pc.createDataChannel('game'); setupDC();
+  pc.onicecandidate=e=>{ if(e.candidate) roomRef.child('offerCandidates').push(e.candidate.toJSON()); };
+  const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+  await roomRef.update({offer});
+  document.getElementById('status').textContent='部屋作成。参加者を待っています...';
+  setupChat(roomId); setupRematch(roomId); document.getElementById('leaveBtn').style.display='inline-block';
+  roomRef.on('value', async snap=>{
+    const data=snap.val();
+    if(!pc.currentRemoteDescription && data?.answer){ await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }
+  });
+  roomRef.child('answerCandidates').on('child_added', async s=>{ try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch{} });
+}
+
+async function joinRoom(roomId){
+  playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
+  currentRoomId=roomId;
+  roomRef=db.ref('rooms/'+roomId);
+  const snap=await roomRef.get(); if(!snap.exists()){ alert('部屋が見つかりません'); return; }
+  const data=snap.val();
+  if(data.host && data.guest){ alert('この部屋はすでに2人が参加しています'); return; }
+  await roomRef.update({guest:playerName}); isHost=false;
+  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc.ondatachannel=e=>{ dc=e.channel; setupDC(); };
+  pc.onicecandidate=e=>{ if(e.candidate) roomRef.child('answerCandidates').push(e.candidate.toJSON()); };
+  await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+  const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
+  await roomRef.update({answer});
+  document.getElementById('status').textContent='接続中...';
+  setupChat(roomId); setupRematch(roomId); document.getElementById('leaveBtn').style.display='inline-block';
+  roomRef.child('offerCandidates').on('child_added', async s=>{ try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch{} });
+}
+
+// UIボタン
+document.getElementById('createBtn').onclick=()=>{ const id=document.getElementById('roomId').value.trim(); if(!id){alert('部屋コードを入力してください'); return;} createRoom(id); };
+document.getElementById('joinBtn').onclick=()=>{ const id=document.getElementById('roomId').value.trim(); if(!id){alert('部屋コードを入力してください'); return;} joinRoom(id); };
+
 </script>
 </body>
 </html>
