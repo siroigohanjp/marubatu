@@ -7,7 +7,8 @@
 <style>
   body { font-family: sans-serif; background: #0f1724; color: #fff; text-align: center; padding: 20px; }
   #board { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; justify-content: center; margin-top: 20px; }
-  .cell { width: 100px; height: 100px; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 48px; cursor: pointer; border-radius: 8px; transition: background 0.3s; }
+  .cell { width: 100px; height: 100px; background: #1e293b; display: flex; align-items: center; justify-content: center;
+    font-size: 48px; cursor: pointer; border-radius: 8px; transition: background 0.3s; }
   .cell.disabled { opacity: 0.5; cursor: not-allowed; }
   input, button { font-size: 16px; padding: 6px; margin: 4px; }
   #turnInfo { font-size: 22px; margin-top: 15px; font-weight: bold; }
@@ -23,7 +24,7 @@
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.2</h1>
+<h1>オンライン三目並べｖ0.0.3</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -44,12 +45,12 @@
 <div id="chatArea">
   <h3>チャット</h3>
   <div id="chatLog"></div>
-  <input id="chatInput" placeholder="メッセージ..." />
-  <button id="chatSend">送信</button>
+  <input id="chatInput" placeholder="メッセージ..." disabled />
+  <button id="chatSend" disabled>送信</button>
 </div>
 
 <script>
-// ==== Firebase設定（★自分のに置き換え） ====
+// ==== Firebase設定 ====
   const firebaseConfig = {
     apiKey: "AIzaSyAI3pNSCaU2teHdqa1Rh1eLoQu1VZYtoh4",
     authDomain: "webrtc-gamesg.firebaseapp.com",
@@ -62,30 +63,26 @@
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ==== 変数定義 ====
+// ==== 変数 ====
 let pc, dc;
 let myMark = '-', opMark = '-';
 let myTurn = false;
 let board = Array(9).fill(null);
-let roomRef;
-let chatRef;
-let isHost = false;
-let gameOver = false;
+let roomRef, chatRef, rematchRef;
+let isHost = false, gameOver = false, myReady = false;
 let playerName = '';
-let rematchRef;
-let myReady = false;
+let chatListener = null;
 
 // ==== 盤面生成 ====
 const boardEl = document.getElementById('board');
 for (let i = 0; i < 9; i++) {
   const cell = document.createElement('div');
   cell.className = 'cell';
-  cell.dataset.i = i;
   cell.onclick = () => makeMove(i);
   boardEl.appendChild(cell);
 }
 
-// ==== 表示更新 ====
+// ==== 表示 ====
 function render() {
   board.forEach((v, i) => {
     const c = boardEl.children[i];
@@ -100,6 +97,7 @@ function render() {
   }
 }
 
+// ==== 勝敗判定 ====
 function winCheck() {
   const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   for (const [a,b,c] of lines) {
@@ -109,185 +107,178 @@ function winCheck() {
   return null;
 }
 
+// ==== 一手 ====
 function makeMove(i) {
   if (!myTurn || board[i] || gameOver) return;
   board[i] = myMark;
-  send({type: 'move', i});
+  send({type:'move', i});
   myTurn = false;
   render();
   const w = winCheck();
   if (w) {
     gameOver = true;
-    send({type: 'gameover', winner: w});
+    send({type:'gameover', winner:w});
     showResult(w);
   }
 }
 
-function showResult(winner) {
+// ==== 結果 ====
+function showResult(w) {
   const resultEl = document.getElementById('result');
-  if (winner === 'draw') resultEl.textContent = '引き分け！';
-  else if (winner === myMark) resultEl.textContent = 'あなたの勝ち！🎉';
-  else resultEl.textContent = 'あなたの負け…😢';
-  document.getElementById('resetBtn').style.display = 'inline-block';
-  myTurn = false;
-  render();
+  if (w==='draw') resultEl.textContent='引き分け！';
+  else if (w===myMark) resultEl.textContent='あなたの勝ち！🎉';
+  else resultEl.textContent='あなたの負け…😢';
+  document.getElementById('resetBtn').style.display='inline-block';
+  myTurn=false; render();
 }
 
-// ==== 再戦処理 ====
+// ==== 再戦 ====
 function setupRematch(roomId) {
-  rematchRef = db.ref('rooms/' + roomId + '/rematch');
+  rematchRef = db.ref('rooms/'+roomId+'/rematch');
   rematchRef.remove();
-
-  rematchRef.on('value', snap => {
-    const data = snap.val() || {};
-    if (data.hostReady && data.guestReady) {
+  rematchRef.on('value', snap=>{
+    const data = snap.val()||{};
+    if(data.hostReady && data.guestReady){
       startRematch();
-      rematchRef.remove(); // 一度リセット
+      rematchRef.remove();
     }
   });
 }
 
-document.getElementById('resetBtn').onclick = () => {
-  myReady = true;
-  document.getElementById('resetBtn').disabled = true;
-  document.getElementById('resetBtn').textContent = '相手の準備を待っています...';
-  rematchRef.update(isHost ? { hostReady: true } : { guestReady: true });
+document.getElementById('resetBtn').onclick = ()=>{
+  myReady=true;
+  document.getElementById('resetBtn').disabled=true;
+  document.getElementById('resetBtn').textContent='相手の準備を待っています...';
+  rematchRef.update(isHost?{hostReady:true}:{guestReady:true});
 };
 
-function startRematch() {
-  board = Array(9).fill(null);
-  gameOver = false;
-  myTurn = isHost; // ホストが先手
-  document.getElementById('result').textContent = '';
-  document.getElementById('resetBtn').style.display = 'none';
-  document.getElementById('resetBtn').disabled = false;
-  document.getElementById('resetBtn').textContent = 'もう一度遊ぶ';
+function startRematch(){
+  board=Array(9).fill(null);
+  gameOver=false;
+  myTurn=isHost;
+  document.getElementById('result').textContent='';
+  document.getElementById('resetBtn').style.display='none';
+  document.getElementById('resetBtn').disabled=false;
+  document.getElementById('resetBtn').textContent='もう一度遊ぶ';
   render();
 }
 
 // ==== Firebaseシグナリング ====
-async function createRoom(roomId) {
-  playerName = document.getElementById('playerName').value.trim() || 'プレイヤー';
-  isHost = true;
-  roomRef = db.ref('rooms/' + roomId);
+async function createRoom(roomId){
+  playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
+  isHost=true;
+  roomRef=db.ref('rooms/'+roomId);
   await roomRef.remove();
-  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-  dc = pc.createDataChannel('game');
+  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  dc=pc.createDataChannel('game');
   setupDC();
-  pc.onicecandidate = e => { if (e.candidate) roomRef.child('offerCandidates').push(e.candidate.toJSON()); };
-  const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-  await roomRef.set({ offer: offer });
-  document.getElementById('status').textContent = '部屋を作成しました。参加者を待っています...';
-  chatRef = db.ref('rooms/' + roomId + '/chat');
-  setupChat();
+  pc.onicecandidate=e=>{if(e.candidate)roomRef.child('offerCandidates').push(e.candidate.toJSON());};
+  const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+  await roomRef.set({offer});
+  document.getElementById('status').textContent='部屋作成。参加者を待っています...';
+  setupChat(roomId);
   setupRematch(roomId);
 
-  roomRef.on('value', async snap => {
-    const data = snap.val();
-    if (!pc.currentRemoteDescription && data?.answer) {
+  roomRef.on('value',async snap=>{
+    const data=snap.val();
+    if(!pc.currentRemoteDescription && data?.answer){
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
     }
   });
-  roomRef.child('answerCandidates').on('child_added', async s => {
-    try { await pc.addIceCandidate(new RTCIceCandidate(s.val())); } catch {}
+  roomRef.child('answerCandidates').on('child_added',async s=>{
+    try{await pc.addIceCandidate(new RTCIceCandidate(s.val()));}catch{}
   });
 }
 
-async function joinRoom(roomId) {
-  playerName = document.getElementById('playerName').value.trim() || 'プレイヤー';
-  isHost = false;
-  roomRef = db.ref('rooms/' + roomId);
-  const snap = await roomRef.get();
-  if (!snap.exists()) { alert('部屋が見つかりません'); return; }
-  const offer = snap.val().offer;
-  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-  pc.ondatachannel = e => { dc = e.channel; setupDC(); };
-  pc.onicecandidate = e => { if (e.candidate) roomRef.child('answerCandidates').push(e.candidate.toJSON()); };
+async function joinRoom(roomId){
+  playerName=document.getElementById('playerName').value.trim()||'プレイヤー';
+  isHost=false;
+  roomRef=db.ref('rooms/'+roomId);
+  const snap=await roomRef.get();
+  if(!snap.exists()){alert('部屋が見つかりません');return;}
+  const offer=snap.val().offer;
+  pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc.ondatachannel=e=>{dc=e.channel;setupDC();};
+  pc.onicecandidate=e=>{if(e.candidate)roomRef.child('answerCandidates').push(e.candidate.toJSON());};
   await pc.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
-  await roomRef.update({ answer: answer });
-  document.getElementById('status').textContent = '接続中...';
-  chatRef = db.ref('rooms/' + roomId + '/chat');
-  setupChat();
+  const answer=await pc.createAnswer(); await pc.setLocalDescription(answer);
+  await roomRef.update({answer});
+  document.getElementById('status').textContent='接続中...';
+  setupChat(roomId);
   setupRematch(roomId);
-
-  roomRef.child('offerCandidates').on('child_added', async s => {
-    try { await pc.addIceCandidate(new RTCIceCandidate(s.val())); } catch {}
+  roomRef.child('offerCandidates').on('child_added',async s=>{
+    try{await pc.addIceCandidate(new RTCIceCandidate(s.val()));}catch{}
   });
 }
 
 // ==== DataChannel ====
-function setupDC() {
-  dc.onopen = () => {
-    document.getElementById('status').textContent = '接続済み';
-    if (isHost) {
-      myMark = 'X'; opMark = 'O'; myTurn = true;
-      send({ type: 'assign', mark: 'O', yourTurn: false });
+function setupDC(){
+  dc.onopen=()=>{
+    document.getElementById('status').textContent='接続済み';
+    if(isHost){
+      myMark='X';opMark='O';myTurn=true;
+      send({type:'assign',mark:'O',yourTurn:false});
     }
     render();
+    // チャット有効化
+    document.getElementById('chatInput').disabled=false;
+    document.getElementById('chatSend').disabled=false;
   };
 
-  dc.onmessage = e => {
-    const data = JSON.parse(e.data);
-    if (data.type === 'move') {
-      board[data.i] = opMark;
-      myTurn = true;
-      render();
-      const w = winCheck();
-      if (w) {
-        gameOver = true;
-        showResult(w);
-      }
-    } else if (data.type === 'assign') {
-      myMark = data.mark;
-      opMark = (data.mark === 'X' ? 'O' : 'X');
-      myTurn = data.yourTurn || false;
-      render();
-    } else if (data.type === 'gameover') {
-      gameOver = true;
-      showResult(data.winner);
+  dc.onmessage=e=>{
+    const data=JSON.parse(e.data);
+    if(data.type==='move'){
+      board[data.i]=opMark; myTurn=true; render();
+      const w=winCheck(); if(w){gameOver=true;showResult(w);}
+    }else if(data.type==='assign'){
+      myMark=data.mark; opMark=(data.mark==='X'?'O':'X');
+      myTurn=data.yourTurn||false; render();
+    }else if(data.type==='gameover'){
+      gameOver=true;showResult(data.winner);
     }
   };
 }
+function send(obj){dc.send(JSON.stringify(obj));}
 
-function send(obj) { dc.send(JSON.stringify(obj)); }
+// ==== チャット ====
+function setupChat(roomId){
+  const chatLog=document.getElementById('chatLog');
+  const chatSend=document.getElementById('chatSend');
+  const chatInput=document.getElementById('chatInput');
+  chatLog.innerHTML='';
+  chatRef=db.ref(`rooms/${roomId}/chat`);
 
-// ==== チャット機能 ====
-let chatListenerSet = false;
-function setupChat() {
-  const chatSend = document.getElementById('chatSend');
-  const chatInput = document.getElementById('chatInput');
-  const chatLog = document.getElementById('chatLog');
+  // 以前のリスナー削除
+  if(chatListener && typeof chatListener.off==='function') chatListener.off();
+  chatRef.off();
 
-  chatSend.disabled = false;
-  chatSend.onclick = async () => {
-    const msg = chatInput.value.trim();
-    if (!msg || !chatRef) return;
-    await chatRef.push({ name: playerName, msg, time: Date.now() });
-    chatInput.value = '';
+  chatSend.onclick=async()=>{
+    const msg=chatInput.value.trim();
+    if(!msg||!chatRef)return;
+    await chatRef.push({name:playerName,msg,time:Date.now()});
+    chatInput.value='';
   };
 
-  if (chatListenerSet) return;
-  chatListenerSet = true;
-  chatRef.on('child_added', snap => {
-    const { name, msg } = snap.val();
-    const div = document.createElement('div');
-    div.className = 'chatMsg';
-    div.textContent = `${name}: ${msg}`;
+  chatRef.on('child_added',snap=>{
+    const {name,msg}=snap.val();
+    const div=document.createElement('div');
+    div.className='chatMsg';
+    div.textContent=`${name}: ${msg}`;
     chatLog.appendChild(div);
-    chatLog.scrollTop = chatLog.scrollHeight;
+    chatLog.scrollTop=chatLog.scrollHeight;
   });
+  chatListener=chatRef;
 }
 
-// ==== UIボタン ====
-document.getElementById('createBtn').onclick = () => {
-  const id = document.getElementById('roomId').value.trim();
-  if (!id) { alert('部屋コードを入力してください'); return; }
+// ==== UI ====
+document.getElementById('createBtn').onclick=()=>{
+  const id=document.getElementById('roomId').value.trim();
+  if(!id){alert('部屋コードを入力してください');return;}
   createRoom(id);
 };
-document.getElementById('joinBtn').onclick = () => {
-  const id = document.getElementById('roomId').value.trim();
-  if (!id) { alert('部屋コードを入力してください'); return; }
+document.getElementById('joinBtn').onclick=()=>{
+  const id=document.getElementById('roomId').value.trim();
+  if(!id){alert('部屋コードを入力してください');return;}
   joinRoom(id);
 };
 </script>
