@@ -192,19 +192,34 @@ async function leaveRoom(roomId) {
 
 
 // UIリセット
-function resetGameUI(){
-  board=Array(9).fill(null); myMark=opMark='-'; myTurn=false; gameOver=false;
-  roomRef=null; chatRef=null; rematchRef=null;
-  document.getElementById('status').textContent='状態: 未接続';
-  document.getElementById('turnInfo').textContent=''; 
-  document.getElementById('result').textContent='';
-  document.getElementById('chatLog').innerHTML='';
-  Array.from(boardEl.children).forEach(c=>{ c.textContent=''; c.classList.remove('win','draw','disabled'); });
-  document.getElementById('resetBtn').style.display='none'; 
-  document.getElementById('leaveBtn').style.display='none';
-  document.getElementById('chatInput').disabled=true; 
-  document.getElementById('chatSend').disabled=true;
+function resetGameUI(fullReset = true) {
+  board = Array(9).fill(null);
+  myMark = opMark = '-';
+  myTurn = false;
+  gameOver = false;
+
+  roomRef = null;
+  chatRef = null;
+  rematchRef = null;
+
+  document.getElementById('turnInfo').textContent = '';
+  document.getElementById('result').textContent = '';
+  document.getElementById('chatLog').innerHTML = '';
+  document.getElementById('resetBtn').style.display = 'none';
+  document.getElementById('leaveBtn').style.display = 'none';
+  document.getElementById('chatInput').disabled = true;
+  document.getElementById('chatSend').disabled = true;
+
+  Array.from(boardEl.children).forEach(c => { 
+    c.textContent = ''; 
+    c.classList.remove('win','draw','disabled'); 
+  });
+
+  if (fullReset) {
+    document.getElementById('playerName').value = ''; // 名前も初期化
+  }
 }
+
 
 // 部屋一覧
 const roomListEl=document.getElementById('roomList');
