@@ -1,87 +1,79 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>オンライン三目並べ（Firebase + WebRTC）</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>オンライン三目並べ</title>
 <style>
-body {
-  font-family: sans-serif;
-  background: #111;
-  color: #fff;
-  text-align: center;
-  margin: 0;
-  padding: 20px;
-}
-#board {
-  display: grid;
-  grid-template-columns: repeat(3, 100px);
-  gap: 5px;
-  justify-content: center;
-  margin: 20px auto;
-}
-.cell {
-  width: 100px;
-  height: 100px;
-  background: #222;
-  font-size: 60px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  transition: background 0.3s;
-}
-.cell:hover { background: #333; }
-#chat { margin-top: 20px; }
-#chatLog {
-  width: 320px;
-  height: 150px;
-  overflow-y: auto;
-  margin: 0 auto;
-  padding: 5px;
-  background: #222;
-  text-align: left;
-}
-#status {
-  margin-top: 10px;
-  font-weight: bold;
-  color: #0f0;
-}
-.turn-highlight {
-  color: #ff0;
-  font-weight: bold;
-}
+  :root{ --bg:#0f1724; --panel:#0b1220; --card:#111827; --accent:#06b6d4; --good:#22c55e; --bad:#f87171; --muted:#94a3b8;}
+  body{font-family:system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "メイリオ", sans-serif;background:var(--bg);color:#fff;padding:18px;box-sizing:border-box;}
+  h1{margin:0 0 12px 0;font-size:20px}
+  .row{display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:8px;flex-wrap:wrap}
+  input,button{font-size:14px;padding:8px;border-radius:6px;border:0;outline:none}
+  input{background:#081122;color:#fff}
+  button{background:var(--card);color:#fff;cursor:pointer}
+  #status{margin-top:8px;font-size:13px}
+  #container{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+  #left, #right{width:360px;min-height:120px;background:var(--card);padding:12px;border-radius:8px}
+  #board{display:grid;grid-template-columns:repeat(3,100px);gap:8px;justify-content:center;margin:10px auto}
+  .cell{width:100px;height:100px;background:#0e1724;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:48px;cursor:pointer;transition:all .12s}
+  .cell.disabled{opacity:.4;cursor:not-allowed}
+  .win{background:var(--good)!important;box-shadow:0 0 18px rgba(34,197,94,.2)}
+  .draw{opacity:.75}
+  #turnInfo{margin-top:6px;font-weight:700}
+  #turnInfo.active{color:var(--good);text-shadow:0 0 8px rgba(34,197,94,.12)}
+  #chatLog{height:160px;overflow:auto;background:#071022;padding:8px;border-radius:6px;margin-bottom:8px}
+  .chatMsg{font-size:13px;margin-bottom:6px}
+  #roomList{max-height:200px;overflow:auto}
+  .roomItem{display:flex;justify-content:space-between;padding:6px;border-radius:6px;background:#061322;margin-bottom:6px;cursor:pointer}
+  .muted{color:var(--muted)}
+  footer{margin-top:10px;font-size:12px;color:var(--muted);text-align:center}
 </style>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js"></script>
 </head>
 <body>
-<h1>オンライン三目並べｖ0.0.19</h1>
-<div>
-  名前: <input id="playerName" placeholder="プレイヤー名">
-</div>
-<div>
-  <button id="createBtn">部屋を作成</button>
-  <input id="roomId" placeholder="部屋コード">
-  <button id="joinBtn">参加</button>
-</div>
+<h1>オンライン三目並べ（v0.19）</h1>
 
+<div class="row">
+  <input id="playerName" placeholder="名前を入力" />
+  <input id="roomIdInput" placeholder="部屋コード" />
+  <button id="createBtn">部屋を作る</button>
+  <button id="joinBtn">参加する</button>
+  <button id="leaveBtn" style="display:none">退出</button>
+</div>
 <div id="status">状態: 未接続</div>
-<div id="turnInfo"></div>
 
-<div id="board"></div>
+<div id="container">
+  <div id="left">
+    <div id="roomListTitle"><strong>ルーム一覧</strong></div>
+    <div id="roomList" style="margin-top:8px"></div>
+  </div>
 
-<div id="chat">
-  <h3>チャット</h3>
-  <div id="chatLog"></div>
-  <input id="chatInput" placeholder="メッセージ">
-  <button id="chatSend">送信</button>
+  <div id="right">
+    <div id="board"></div>
+    <div id="turnInfo"></div>
+    <div id="result" style="margin-top:6px"></div>
+    <div style="margin-top:10px">
+      <button id="rematchBtn" style="display:none">再戦リクエスト</button>
+    </div>
+
+    <div style="margin-top:12px">
+      <div><strong>チャット</strong></div>
+      <div id="chatLog"></div>
+      <div class="row" style="justify-content:center">
+        <input id="chatInput" placeholder="メッセージ" style="width:220px" disabled />
+        <button id="chatSend" disabled>送信</button>
+      </div>
+    </div>
+  </div>
 </div>
 
-<button id="leaveBtn" style="display:none;">退出</button>
+<footer>Firebaseでシグナリング／チャット（ルーム単位）。3人以上は入れません。</footer>
 
 <script>
-// === Firebase初期化 ===
+/* ===== Firebase 設定 - 必要なら置き換えてください ===== */
   const firebaseConfig = {
     apiKey: "AIzaSyAI3pNSCaU2teHdqa1Rh1eLoQu1VZYtoh4",
     authDomain: "webrtc-gamesg.firebaseapp.com",
@@ -94,177 +86,505 @@ body {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// === 変数 ===
-let roomRef, chatRef, dc;
+/* ===== 変数 ===== */
+let pc, dc;
 let isHost = false;
-let myMark = '';
+let myMark='-', opMark='-';
 let myTurn = false;
 let board = Array(9).fill(null);
-let gameOver = false;
+let roomRef = null;
+let chatRef = null;
+let rematchRef = null;
 let currentRoomId = null;
+let gameOver = false;
 
-// === UI要素 ===
+/* ===== UI 要素 ===== */
+const playerNameInput = document.getElementById('playerName');
+const roomIdInput = document.getElementById('roomIdInput');
+const createBtn = document.getElementById('createBtn');
+const joinBtn = document.getElementById('joinBtn');
+const leaveBtn = document.getElementById('leaveBtn');
+const statusEl = document.getElementById('status');
+const roomListEl = document.getElementById('roomList');
 const boardEl = document.getElementById('board');
-for (let i=0;i<9;i++){
-  const cell = document.createElement('div');
-  cell.className='cell';
-  cell.dataset.index=i;
-  cell.onclick=()=>clickCell(i);
-  boardEl.appendChild(cell);
+const turnInfo = document.getElementById('turnInfo');
+const resultEl = document.getElementById('result');
+const chatLog = document.getElementById('chatLog');
+const chatInput = document.getElementById('chatInput');
+const chatSend = document.getElementById('chatSend');
+const rematchBtn = document.getElementById('rematchBtn');
+
+/* ===== 盤面生成 ===== */
+for(let i=0;i<9;i++){
+  const c = document.createElement('div');
+  c.className='cell';
+  c.dataset.i = i;
+  c.onclick = ()=> handleCellClick(i);
+  boardEl.appendChild(c);
 }
 
-// === 関数 ===
+/* ===== 表示更新 ===== */
 function render(){
-  board.forEach((v,i)=>{ boardEl.children[i].textContent=v?v:''; });
-  document.getElementById('turnInfo').innerHTML = myTurn ? 
-    `<span class="turn-highlight">あなたの番です</span>` : 
-    '相手の番です';
-}
-function send(obj){ if(dc && dc.readyState==='open') dc.send(JSON.stringify(obj)); }
-function resetGameUI(full=true){
-  board = Array(9).fill(null);
-  myMark='';
-  myTurn=false;
-  gameOver=false;
-  boardEl.querySelectorAll('.cell').forEach(c=>c.textContent='');
-  document.getElementById('chatLog').innerHTML='';
-  document.getElementById('turnInfo').textContent='';
-  document.getElementById('status').textContent='状態: 未接続';
-  if(full) document.getElementById('playerName').value='';
-}
-
-// === ルーム作成 ===
-document.getElementById('createBtn').onclick = async()=>{
-  const name = document.getElementById('playerName').value.trim();
-  if(!name) return alert('名前を入力してください');
-  isHost = true;
-  const newRoom = db.ref('rooms').push();
-  roomRef = newRoom;
-  currentRoomId = newRoom.key;
-  await roomRef.set({ host:name, guest:null, state:'waiting' });
-  chatRef = db.ref(`chats/${currentRoomId}`);
-  document.getElementById('status').textContent='部屋コード: '+currentRoomId+'（待機中）';
-  document.getElementById('leaveBtn').style.display='inline';
-  waitForGuest();
-};
-
-// === ルーム参加 ===
-document.getElementById('joinBtn').onclick = async()=>{
-  const name = document.getElementById('playerName').value.trim();
-  const id = document.getElementById('roomId').value.trim();
-  if(!name||!id) return alert('名前と部屋コードを入力してください');
-  const r = db.ref(`rooms/${id}`);
-  const snap = await r.get();
-  if(!snap.exists()) return alert('部屋が存在しません');
-  const data = snap.val();
-  if(data.guest) return alert('満員です');
-  await r.update({ guest:name, state:'ready' });
-  isHost=false; roomRef=r; currentRoomId=id;
-  chatRef = db.ref(`chats/${currentRoomId}`);
-  startGame('O');
-};
-
-// === ゲスト待ち ===
-function waitForGuest(){
-  roomRef.on('value', snap=>{
-    const data=snap.val(); if(!data) return;
-    if(data.guest && data.state==='ready'){
-      startGame('X');
-    }
+  board.forEach((v,i)=>{
+    const c = boardEl.children[i];
+    c.textContent = v||'';
+    c.classList.toggle('disabled', !myTurn || v || gameOver);
   });
+  if(gameOver){
+    turnInfo.textContent = 'ゲーム終了';
+    turnInfo.classList.remove('active');
+  } else {
+    turnInfo.textContent = myTurn ? 'あなたの手番！' : '相手の手番…';
+    turnInfo.classList.toggle('active', myTurn);
+  }
 }
 
-// === ゲーム開始 ===
-function startGame(mark){
-  myMark=mark;
-  myTurn = (mark==='X');
-  document.getElementById('status').textContent = '状態: 対戦中';
-  render();
-  chatRef.on('child_added', snap=>{
-    const msg=snap.val();
-    const log=document.getElementById('chatLog');
-    log.innerHTML += `<div><b>${msg.name}:</b> ${msg.text}</div>`;
-    log.scrollTop=log.scrollHeight;
-  });
-  document.getElementById('chatSend').onclick=()=>{
-    const txt=document.getElementById('chatInput').value.trim();
-    if(!txt) return;
-    chatRef.push({name:document.getElementById('playerName').value,text:txt});
-    document.getElementById('chatInput').value='';
-  };
-  document.getElementById('chatInput').disabled=false;
-  document.getElementById('chatSend').disabled=false;
-  document.getElementById('leaveBtn').style.display='inline';
-  setupRTC();
-}
-
-// === RTC ===
-async function setupRTC(){
-  const pc = new RTCPeerConnection();
-  dc = pc.createDataChannel('game');
-  dc.onmessage = e => {
-    const data=JSON.parse(e.data);
-    if(data.type==='move'){
-      board[data.i]=data.mark;
-      checkWin();
-      myTurn=true;
-      render();
-    } else if(data.type==='guestLeft'){
-      // ゲスト退出時ホストをリセット
-      board=Array(9).fill(null);
-      boardEl.querySelectorAll('.cell').forEach(c=>c.textContent='');
-      document.getElementById('chatLog').innerHTML='';
-      document.getElementById('turnInfo').textContent='相手が退出しました。待機中...';
-      document.getElementById('status').textContent='状態: 待機中';
-    }
-  };
-}
-
-// === マスクリック ===
-function clickCell(i){
-  if(!myTurn||gameOver||board[i]) return;
-  board[i]=myMark;
-  send({type:'move',i,mark:myMark});
-  myTurn=false;
-  render();
-  checkWin();
-}
-
-// === 勝敗判定 ===
-function checkWin(){
-  const lines=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+/* ===== 勝敗判定 ===== */
+function winCheck(){
+  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   for(const [a,b,c] of lines){
-    if(board[a] && board[a]===board[b] && board[a]===board[c]){
-      gameOver=true;
-      document.getElementById('turnInfo').innerHTML=`<span class="turn-highlight">${board[a]}の勝ち！</span>`;
-      return;
+    if(board[a] && board[a]==board[b] && board[a]==board[c]) return {winner: board[a], line:[a,b,c]};
+  }
+  if(board.every(Boolean)) return {winner:'draw'};
+  return null;
+}
+
+/* ===== マスクリック処理 ===== */
+function handleCellClick(i){
+  if(!myTurn || board[i] || gameOver) return;
+  board[i] = myMark;
+  broadcast({type:'move', i});
+  myTurn = false;
+  render();
+  const r = winCheck();
+  if(r){
+    gameOver = true;
+    broadcast({type:'gameover', winner:r.winner, line:r.line});
+    showResult(r.winner, r.line);
+  }
+}
+
+/* ===== 結果表示 ===== */
+function showResult(winner, line=[]){
+  // clear previous highlights
+  Array.from(boardEl.children).forEach(c=>{ c.classList.remove('win','draw'); });
+
+  if(winner === 'draw'){
+    resultEl.textContent = '引き分け！';
+    Array.from(boardEl.children).forEach(c=>c.classList.add('draw'));
+    turnInfo.textContent = '引き分け！';
+    turnInfo.classList.add('drawText');
+  } else {
+    const isWin = (winner === myMark);
+    resultEl.textContent = isWin ? 'あなたの勝ち！🎉' : 'あなたの負け…😢';
+    turnInfo.textContent = isWin ? '勝利！🎉' : '敗北…';
+    if(line && line.length){
+      line.forEach(i => boardEl.children[i].classList.add('win'));
     }
   }
-  if(board.every(v=>v)) { gameOver=true; document.getElementById('turnInfo').textContent='引き分け'; }
+  rematchBtn.style.display = 'inline-block';
+  myTurn = false;
+  render();
 }
 
-// === 退出 ===
-document.getElementById('leaveBtn').onclick = ()=> leaveRoom(currentRoomId);
+/* ===== Firebase: ルーム一覧の更新 ===== */
+function updateRoomList(){
+  db.ref('rooms').on('value', snap=>{
+    const data = snap.val() || {};
+    roomListEl.innerHTML = '';
+    Object.keys(data).forEach(rid=>{
+      const room = data[rid];
+      // remove empty rooms
+      if(!room.host && !room.guest){
+        db.ref('rooms/'+rid).remove();
+        return;
+      }
+      const div = document.createElement('div');
+      div.className = 'roomItem';
+      div.innerHTML = `<span>${rid} (ホスト: ${room.host || '-'})</span><span class="muted">${room.host && room.guest ? '満' : '参加'}</span>`;
+      div.onclick = () => {
+        const name = playerNameInput.value.trim();
+        if(!name){ alert('名前を入力してください'); return; }
+        roomIdInput.value = rid;
+        joinRoom(rid);
+      };
+      roomListEl.appendChild(div);
+    });
+  });
+}
+updateRoomList();
+
+/* ===== チャットセットアップ ===== */
+let chatListener = null;
+function setupChat(roomId){
+  chatLog.innerHTML = '';
+  chatInput.disabled = false;
+  chatSend.disabled = false;
+  chatRef = db.ref(`rooms/${roomId}/chat`);
+  // clear previous listeners
+  chatRef.off();
+  chatRef.on('child_added', snap=>{
+    const v = snap.val();
+    const d = document.createElement('div');
+    d.className = 'chatMsg';
+    d.innerHTML = `<b>${escapeHtml(v.name)}:</b> ${escapeHtml(v.msg)}`;
+    chatLog.appendChild(d);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  });
+  chatSend.onclick = async ()=>{
+    const txt = chatInput.value.trim();
+    if(!txt || !chatRef) return;
+    await chatRef.push({ name: playerNameInput.value.trim(), msg: txt, time: Date.now() });
+    chatInput.value = '';
+  };
+}
+
+/* ===== WebRTC シグナリング via Firebase ===== */
+async function createRoom(roomId){
+  const name = playerNameInput.value.trim();
+  if(!name){ alert('名前を入力してください'); return; }
+  if(!roomId){ alert('部屋コードを入力してください'); return; }
+
+  const rRef = db.ref('rooms/'+roomId);
+  const s = await rRef.get();
+  if(s.exists()){ alert('この部屋IDは既に存在します。別のIDを使用してください。'); return; }
+
+  isHost = true;
+  currentRoomId = roomId;
+  roomRef = rRef;
+  await roomRef.set({ host: name, guest: null });
+
+  // create RTCPeerConnection
+  pc = new RTCPeerConnection({ iceServers: [{ urls:'stun:stun.l.google.com:19302' }] });
+  dc = pc.createDataChannel('game');
+  setupDataChannel();
+
+  pc.onicecandidate = e => {
+    if(e.candidate) roomRef.child('offerCandidates').push(e.candidate.toJSON());
+  };
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await roomRef.update({ offer });
+
+  statusEl.textContent = `状態: 作成済（${roomId}） - 相手を待機中...`;
+  setupChat(roomId);
+  setupRematch(roomId);
+  leaveBtn.style.display = 'inline-block';
+
+  // watch answer and candidate
+  roomRef.on('value', async snap=>{
+    const data = snap.val();
+    if(!pc.currentRemoteDescription && data?.answer){
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    }
+  });
+  roomRef.child('answerCandidates').on('child_added', async s=>{
+    try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch(e){}
+  });
+}
+
+async function joinRoom(roomId){
+  const name = playerNameInput.value.trim();
+  if(!name){ alert('名前を入力してください'); return; }
+  if(!roomId){ alert('部屋コードを入力してください'); return; }
+
+  const rRef = db.ref('rooms/'+roomId);
+  const s = await rRef.get();
+  if(!s.exists()){ alert('部屋が見つかりません'); return; }
+  const data = s.val();
+
+  if(data.host && data.guest){
+    alert('この部屋はすでに2人が参加しています');
+    return;
+  }
+
+  // mark guest
+  await rRef.update({ guest: name });
+  isHost = false;
+  currentRoomId = roomId;
+  roomRef = rRef;
+
+  // create RTCPeerConnection and set remote offer
+  pc = new RTCPeerConnection({ iceServers: [{ urls:'stun:stun.l.google.com:19302' }] });
+  pc.ondatachannel = e => { dc = e.channel; setupDataChannel(); };
+  pc.onicecandidate = e => { if(e.candidate) roomRef.child('answerCandidates').push(e.candidate.toJSON()); };
+
+  await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await roomRef.update({ answer });
+
+  // assign marks: host X guest O  (host sets assign on open)
+  // For guest we set local marks proactively:
+  myMark = 'O'; opMark = 'X'; myTurn = false;
+  render();
+
+  statusEl.textContent = '状態: 接続中...';
+  setupChat(roomId);
+  setupRematch(roomId);
+  leaveBtn.style.display = 'inline-block';
+
+  roomRef.child('offerCandidates').on('child_added', async s=>{
+    try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch(e){}
+  });
+}
+
+/* ===== DataChannel のセットアップ ===== */
+function setupDataChannel(){
+  dc.onopen = () => {
+    statusEl.textContent = '状態: 接続済み';
+    if(isHost){
+      myMark = 'X'; opMark = 'O'; myTurn = true;
+      // let guest know assign
+      sendLocal({ type:'assign', mark:'O', yourTurn:false });
+    }
+    render();
+    chatInput.disabled = false;
+    chatSend.disabled = false;
+  };
+
+  dc.onmessage = e => {
+    const data = safeJsonParse(e.data);
+    if(!data) return;
+    if(data.type === 'move'){
+      board[data.i] = data.mark;
+      // opponent moved => our turn
+      myTurn = true;
+      render();
+      const r = winCheck();
+      if(r){
+        gameOver = true;
+        showResult(r.winner, r.line);
+      }
+    } else if(data.type === 'assign'){
+      // assign message from host to guest
+      myMark = data.mark;
+      opMark = (data.mark === 'X' ? 'O' : 'X');
+      myTurn = data.yourTurn || false;
+      render();
+    } else if(data.type === 'gameover'){
+      gameOver = true;
+      showResult(data.winner, data.line);
+    } else if(data.type === 'guestLeft'){
+      // host receives guestLeft: reset board/chat but keep host name and room
+      if(isHost){
+        board = Array(9).fill(null);
+        gameOver = false;
+        myTurn = true; // host is first
+        Array.from(boardEl.children).forEach(c=>{ c.textContent=''; c.classList.remove('win','draw','disabled'); });
+        chatLog.innerHTML = '';
+        turnInfo.textContent = '相手が退出しました。待機中...';
+        statusEl.textContent = `状態: 待機中（${currentRoomId}）`;
+        chatInput.disabled = true; chatSend.disabled = true;
+        rematchBtn.style.display = 'none';
+      }
+    } else if(data.type === 'hostLeft'){
+      // guest receives hostLeft: room removed (host left)
+      // reset UI fully (names cleared)
+      alert('ホストが退出しました。部屋は閉じられました。');
+      fullReset(true);
+    } else if(data.type === 'rematchRequest'){
+      // other side requested rematch -> show accept button
+      if(!gameOver) return;
+      if(confirm('相手が再戦を希望しています。再戦を開始しますか？')){
+        requestRematchAccept();
+      }
+    }
+  };
+}
+
+/* helper to send through both datachannel and firebase fallback */
+function broadcast(obj){
+  // send via datachannel if present
+  try{
+    sendLocal(obj);
+  }catch(e){}
+  // also optionally send via firebase if desired (not necessary)
+}
+function sendLocal(obj){
+  if(dc && dc.readyState === 'open'){
+    dc.send(JSON.stringify(obj));
+  }
+}
+
+/* ===== 再戦 (簡易) ===== */
+function setupRematch(roomId){
+  rematchRef = db.ref('rooms/'+roomId+'/rematch');
+  rematchRef.remove();
+  rematchRef.on('value', snap=>{
+    const v = snap.val() || {};
+    if(v.hostReady && v.guestReady){
+      // start rematch
+      board = Array(9).fill(null);
+      gameOver = false;
+      myTurn = isHost; // host first
+      Array.from(boardEl.children).forEach(c=>{ c.textContent=''; c.classList.remove('win','draw','disabled'); });
+      resultEl.textContent = '';
+      rematchRef.remove();
+      rematchBtn.style.display = 'none';
+      render();
+    }
+  });
+}
+rematchBtn.onclick = ()=>{
+  if(!rematchRef) return;
+  rematchBtn.disabled = true;
+  rematchBtn.textContent = '相手の準備を待っています...';
+  rematchRef.update(isHost ? { hostReady:true } : { guestReady:true });
+};
+function requestRematchAccept(){
+  // the other side already set both flags via UI -> handled by rematchRef listener
+  // do nothing here; UI will start rematch when both flags present
+}
+
+/* ===== 退出処理（要件に合わせた挙動） ===== */
+leaveBtn.onclick = ()=> {
+  if(!currentRoomId) { fullReset(false); return; }
+  leaveRoom(currentRoomId);
+};
 
 async function leaveRoom(roomId){
   if(!roomRef) return;
-  const isGuest = !isHost;
-
+  const name = playerNameInput.value.trim();
   if(isHost){
+    // ホストが退出 -> 部屋ごと削除。チャットも削除
     if(chatRef) await chatRef.remove();
     await roomRef.remove();
-    resetGameUI(false);
-    document.getElementById('status').textContent='状態: 未接続（部屋を閉じました）';
-    currentRoomId=null;
-  }else{
-    await roomRef.update({guest:null});
+    // notify guest via datachannel if open
+    try{ sendLocal({ type:'hostLeft' }); }catch(e){}
+    fullReset(true); // clear everything incl. name
+    statusEl.textContent = '状態: 未接続（部屋を閉じました）';
+    currentRoomId = null;
+  } else {
+    // ゲストが退出 -> guest フィールドを削除。チャット履歴を削除。
+    await roomRef.update({ guest: null });
     if(chatRef) await chatRef.remove();
-    try{ send({type:'guestLeft'}); }catch{}
-    resetGameUI(false);
-    document.getElementById('status').textContent='状態: 未接続（退出しました）';
-    currentRoomId=null;
+    // notify host via datachannel
+    try{ sendLocal({ type:'guestLeft' }); }catch(e){}
+    // guest side: reset UI but keep guest name? requirement: "ゲストが退出を押したらゲストがわわ名前以外全部初期化ホストは名前を残して部屋から出ないで初期化"
+    // So guest (this client) should clear everything except their own name? earlier asked guest name cleared? User requested: "ゲストが退出を押したらゲストがわわ名前以外全部初期化ホストは名前を残して部屋から出ないで初期化"
+    // Implement guest: reset everything except keep player's name input value intact (so they can rejoin)
+    resetLocalUIKeepName();
+    statusEl.textContent = '状態: 未接続（退出しました）';
+    currentRoomId = null;
   }
 }
+
+/* ===== UI リセット関数 ===== */
+function fullReset(clearName = false){
+  board = Array(9).fill(null);
+  myMark = opMark = '-';
+  myTurn = false;
+  gameOver = false;
+  roomRef = null;
+  chatRef = null;
+  rematchRef = null;
+  currentRoomId = null;
+  pc = null; dc = null;
+  Array.from(boardEl.children).forEach(c=>{ c.textContent=''; c.classList.remove('win','draw','disabled'); });
+  chatLog.innerHTML = '';
+  resultEl.textContent = '';
+  turnInfo.textContent = '';
+  rematchBtn.style.display = 'none';
+  leaveBtn.style.display = 'none';
+  chatInput.disabled = true; chatSend.disabled = true;
+  if(clearName) playerNameInput.value = '';
+}
+
+/* Guest-side reset that keeps the player's name field value */
+function resetLocalUIKeepName(){
+  const keepName = playerNameInput.value.trim();
+  fullReset(true); // clear names
+  if(keepName) playerNameInput.value = keepName; // restore guest's name only
+}
+
+/* ===== Helpers ===== */
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, ch=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[ch]);}
+function safeJsonParse(s){ try{ return JSON.parse(s); }catch(e){return null;} }
+
+/* ===== ボタンイベント: create/join (UIチェックあり) ===== */
+createBtn.onclick = () => {
+  const name = playerNameInput.value.trim();
+  const rid = roomIdInput.value.trim();
+  if(!name){ alert('名前を入力してください'); return; }
+  if(!rid){ alert('部屋コードを入力してください'); return; }
+  createRoom(rid);
+};
+joinBtn.onclick = () => {
+  const name = playerNameInput.value.trim();
+  const rid = roomIdInput.value.trim();
+  if(!name){ alert('名前を入力してください'); return; }
+  if(!rid){ alert('部屋コードを入力してください'); return; }
+  joinRoom(rid);
+};
+
+/* ===== createRoom wrapper that uses full WebRTC signaling (like earlier) ===== */
+async function createRoom(roomId){
+  const name = playerNameInput.value.trim();
+  if(!name) { alert('名前を入力してください'); return; }
+  roomRef = db.ref('rooms/'+roomId);
+  const s = await roomRef.get();
+  if(s.exists()){ alert('この部屋IDは既に存在します。'); return; }
+  isHost = true;
+  currentRoomId = roomId;
+  await roomRef.set({ host: name, guest: null });
+  // make PC and create offer
+  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  dc = pc.createDataChannel('game');
+  setupDataChannel();
+  pc.onicecandidate = e => { if(e.candidate) roomRef.child('offerCandidates').push(e.candidate.toJSON()); };
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await roomRef.update({ offer });
+  statusEl.textContent = `状態: 作成済（${roomId}） - 相手を待機中...`;
+  setupChat(roomId);
+  setupRematch(roomId);
+  leaveBtn.style.display = 'inline-block';
+  roomRef.on('value', async snap=>{
+    const data = snap.val();
+    if(!pc.currentRemoteDescription && data?.answer){
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    }
+  });
+  roomRef.child('answerCandidates').on('child_added', async s=>{
+    try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch(e){}
+  });
+}
+
+/* joinRoom wrapper that uses full WebRTC signaling (like earlier) */
+async function joinRoom(roomId){
+  const name = playerNameInput.value.trim();
+  if(!name) { alert('名前を入力してください'); return; }
+  roomRef = db.ref('rooms/'+roomId);
+  const s = await roomRef.get();
+  if(!s.exists()){ alert('部屋が見つかりません'); return; }
+  const data = s.val();
+  if(data.host && data.guest){ alert('この部屋はすでに2人が参加しています'); return; }
+  await roomRef.update({ guest: name });
+  isHost = false;
+  currentRoomId = roomId;
+  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  pc.ondatachannel = e => { dc = e.channel; setupDataChannel(); };
+  pc.onicecandidate = e => { if(e.candidate) roomRef.child('answerCandidates').push(e.candidate.toJSON()); };
+  await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await roomRef.update({ answer });
+  // guest initial marks
+  myMark = 'O'; opMark = 'X'; myTurn = false;
+  render();
+  statusEl.textContent = '状態: 接続中...';
+  setupChat(roomId);
+  setupRematch(roomId);
+  leaveBtn.style.display = 'inline-block';
+  roomRef.child('offerCandidates').on('child_added', async s=>{
+    try{ await pc.addIceCandidate(new RTCIceCandidate(s.val())); }catch(e){}
+  });
+}
+
+/* 初期UI */
+render();
+statusEl.textContent = '状態: 未接続';
 </script>
 </body>
 </html>
