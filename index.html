@@ -31,7 +31,7 @@ input, button { font-size: 16px; padding: 6px; margin: 4px; }
 </head>
 <body>
 
-<h1>オンライン三目並べｖ0.0.17</h1>
+<h1>オンライン三目並べｖ0.0.18</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -262,6 +262,25 @@ function setupDC(){
       gameOver=true;
       showResult(data.winner,data.line);
     }
+    else if (data.type === 'guestLeft') {
+  // 🔹 ゲストが退出した時にホスト側をリセット
+  board = Array(9).fill(null);
+  gameOver = false;
+  myTurn = true; // ホストは先手
+  document.getElementById('result').textContent = '';
+  document.getElementById('turnInfo').textContent = '相手が退出しました。待機中...';
+  Array.from(boardEl.children).forEach(c => { 
+    c.textContent = ''; 
+    c.classList.remove('win','draw','disabled'); 
+  });
+  document.getElementById('chatLog').innerHTML = '';
+  render();
+
+  document.getElementById('resetBtn').style.display = 'none';
+  document.getElementById('chatInput').disabled = true;
+  document.getElementById('chatSend').disabled = true;
+}
+
   };
 }
 function send(obj){ dc.send(JSON.stringify(obj)); }
