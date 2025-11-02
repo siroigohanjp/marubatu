@@ -31,7 +31,7 @@ input, button { font-size: 16px; padding: 6px; margin: 4px; }
 </head>
 <body>
 
-<h1>オンライン三目並べｖ0.0.16</h1>
+<h1>オンライン三目並べｖ0.0.17</h1>
 
 <div>
   <input id="playerName" placeholder="名前を入力" />
@@ -143,24 +143,35 @@ function startRematch(){
 
 // 退出
 document.getElementById('leaveBtn').onclick=()=>{ if(currentRoomId) leaveRoom(currentRoomId); };
-async function leaveRoom(roomId){
-  if(!roomRef) return;
+async function leaveRoom(roomId) {
+  if (!roomRef) return;
 
-  if(isHost){
-    // ホストが退出 → 部屋ごと削除
-    if(chatRef) await chatRef.remove();
+  const isGuest = !isHost;
+  const statusEl = document.getElementById('status');
+
+  if (isHost) {
+    // 🔹 ホストが退出 → 部屋ごと削除・全員初期化
+    if (chatRef) await chatRef.remove();
     await roomRef.remove();
-    resetGameUI();
+
+    resetGameUI(true); // 両方初期化
+    statusEl.textContent = '状態: 未接続（部屋を閉じました）';
     currentRoomId = null;
   } else {
-    // ゲストが退出 → ホストは残るがゲストは削除
-    await roomRef.update({guest: null});
-    
-    // ホスト側だけリセット（ボード・チャットなど）
-    board = Array(9).fill(null);
-    gameOver = false;
-    myTurn = true; // ホストは先手
-    if(chatRef) await chatRef.remove();
+    // 🔹 ゲストが退出 → ゲストのみ完全リセット、ホストは残る
+    await roomRef.update({ guest: null });
+    if (chatRef) await chatRef.remove();
+
+    // ホスト側にリセットを通知する（DataChannelが開いていれば）
+    try { if (dc && dc.readyState === 'open') send({ type: 'guestLeft' }); } catch {}
+
+    // 自分（ゲスト）だけリセット
+    resetGameUI(false); // 名前だけ残す
+    statusEl.textContent = '状態: 未接続（退出しました）';
+    currentRoomId = null;
+  }
+}
+
 
     document.getElementById('result').textContent = '';
     document.getElementById('turnInfo').textContent = '状態: 待機中';
